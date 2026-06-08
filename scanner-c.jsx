@@ -38,12 +38,17 @@ function tokens({ accent: accentLight, dark = false, density = 'komfortabel', bi
   };
 }
 
-function ScannerC({ tw, products }) {
+function ScannerC({ tw, products, fit = 'device', meta }) {
   const { useState, useRef, useEffect, useMemo, useCallback } = React;
   const { EUR, stockState } = ATLANTIS;
   const PRODUCTS = products || ATLANTIS.PRODUCTS;
   const { ProductPhoto, Icon } = AUI;
   const T = tokens(tw);
+  const screen = fit === 'screen';
+  const padTopHdr = screen ? 'calc(env(safe-area-inset-top, 12px) + 16px)' : 56;
+  const padTopDet = screen ? 'calc(env(safe-area-inset-top, 12px) + 14px)' : 54;
+  const padBotTabs = screen ? 'calc(env(safe-area-inset-bottom, 10px) + 12px)' : 22;
+  const padBotBtn = screen ? 'calc(env(safe-area-inset-bottom, 10px) + 14px)' : 30;
 
   const [tab, setTab] = useState('scan');
   const [detail, setDetail] = useState(null);
@@ -107,7 +112,7 @@ function ScannerC({ tw, products }) {
     if (!CAM || camRef.current) return;
     setNotFound(null); setCamMsg(''); setCam('live');
     const F2 = (typeof Html5QrcodeSupportedFormats !== 'undefined')
-      ? [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE]
+      ? [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.CODE_93, Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.DATA_MATRIX, Html5QrcodeSupportedFormats.QR_CODE]
       : undefined;
     let inst;
     try { inst = new Html5Qrcode('scanner-cam', { formatsToSupport: F2, verbose: false }); }
@@ -131,7 +136,7 @@ function ScannerC({ tw, products }) {
 
   // ── shared atoms ─────────────────────────────────────────────
   const Header = ({ title, sub, right }) => (
-    <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', padding: `56px ${T.pad + 4}px 13px`, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-end', gap: 12, flexShrink: 0 }}>
+    <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', paddingTop: padTopHdr, paddingLeft: T.pad + 4, paddingRight: T.pad + 4, paddingBottom: 13, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-end', gap: 12, flexShrink: 0 }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: F(26), fontWeight: 800, color: T.ink, letterSpacing: -0.3, lineHeight: 1.1 }}>{title}</div>
         {sub && <div style={{ fontSize: F(13), color: T.mute, marginTop: 3 }}>{sub}</div>}
@@ -173,7 +178,7 @@ function ScannerC({ tw, products }) {
     const TileLabel = ({ icon, children }) => <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5 }}>{icon(T.mute, 14)} {children}</div>;
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-        <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', padding: '54px 12px 11px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', paddingTop: padTopDet, paddingLeft: 12, paddingRight: 12, paddingBottom: 11, display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button onClick={() => setDetail(null)} style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: 'pointer', background: T.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{Icon.back(T.accent, 22)}</button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 1 }}>{detail.brand} · {detail.cat}</div>
@@ -278,7 +283,7 @@ function ScannerC({ tw, products }) {
           </div>
         </div>
 
-        <div style={{ padding: `11px ${T.pad}px 30px`, background: T.bg, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+        <div style={{ paddingTop: 11, paddingLeft: T.pad, paddingRight: T.pad, paddingBottom: padBotBtn, background: T.bg, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button onClick={() => { setDetail(null); setTab('scan'); }} style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', background: T.accent, color: T.dark ? '#06131f' : '#fff', fontSize: F(16), fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>{Icon.scan(T.dark ? '#06131f' : '#fff', 20)} Nächsten Artikel scannen</button>
         </div>
       </div>
@@ -289,7 +294,7 @@ function ScannerC({ tw, products }) {
   const onText = T.dark ? '#06131f' : '#fff';
   const scanTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-      <Header title="Scannen" sub="Artikel-Etikett erfassen" />
+      <Header title="Scannen" sub={meta || 'Artikel-Etikett erfassen'} />
       <div style={{ flex: 1, overflow: 'auto', padding: T.pad }}>
         <div style={{ background: T.card, borderRadius: 18, padding: 18, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {/* camera / viewfinder */}
@@ -402,7 +407,7 @@ function ScannerC({ tw, products }) {
           {tab === 'history' && historyTab}
         </div>
       </div>
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 9, background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderTop: `1px solid ${T.border}`, paddingBottom: 22, display: 'flex' }}>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 9, background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderTop: `1px solid ${T.border}`, paddingBottom: padBotTabs, display: 'flex' }}>
         <TabBtn id="scan" label="Scannen" icon={Icon.scan} />
         <TabBtn id="search" label="Suche" icon={Icon.search} />
         <TabBtn id="history" label="Verlauf" icon={Icon.history} />
