@@ -39,7 +39,7 @@ function tokens({ accent: accentLight, dark = false, density = 'komfortabel', bi
 }
 
 function ScannerC({ tw, products }) {
-  const { useState, useRef } = React;
+  const { useState, useRef, useEffect, useMemo, useCallback } = React;
   const { EUR, stockState } = ATLANTIS;
   const PRODUCTS = products || ATLANTIS.PRODUCTS;
   const { ProductPhoto, Icon } = AUI;
@@ -63,6 +63,68 @@ function ScannerC({ tw, products }) {
       open(p);
     }, 1400);
   };
+
+  // ── real barcode scanning (html5-qrcode) + EAN lookup ────────
+  const CAM = typeof Html5Qrcode !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices;
+  const codeIndex = useMemo(() => {
+    const m = {};
+    (PRODUCTS || []).forEach((p) => {
+      (p.allEans && p.allEans.length ? p.allEans : [p.ean]).forEach((e) => { if (e) m[String(e).trim()] = p; });
+      (p.allArts || [p.art]).forEach((a) => { if (a) m[String(a).trim().toLowerCase()] = p; });
+    });
+    return m;
+  }, [PRODUCTS]);
+  const lookup = (code) => {
+    const c = String(code).trim();
+    return codeIndex[c] || codeIndex[c.toLowerCase()] || null;
+  };
+
+  const camRef = useRef(null);
+  const [cam, setCam] = useState('idle'); // idle | live | error
+  const [camMsg, setCamMsg] = useState('');
+  const [notFound, setNotFound] = useState(null);
+  const [manual, setManual] = useState('');
+  const nfTimer = useRef(0);
+
+  const stopCamera = useCallback(() => {
+    const inst = camRef.current;
+    camRef.current = null;
+    if (inst) { try { inst.stop().then(() => inst.clear()).catch(() => {}); } catch (e) {} }
+    setCam((c) => (c === 'live' ? 'idle' : c));
+  }, []);
+
+  const handleCode = (code) => {
+    const p = lookup(code);
+    if (p) { setNotFound(null); stopCamera(); open(p); }
+    else {
+      setNotFound(String(code).trim());
+      clearTimeout(nfTimer.current);
+      nfTimer.current = setTimeout(() => setNotFound(null), 3500);
+    }
+  };
+
+  const startCamera = () => {
+    if (!CAM || camRef.current) return;
+    setNotFound(null); setCamMsg(''); setCam('live');
+    const F2 = (typeof Html5QrcodeSupportedFormats !== 'undefined')
+      ? [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE]
+      : undefined;
+    let inst;
+    try { inst = new Html5Qrcode('scanner-cam', { formatsToSupport: F2, verbose: false }); }
+    catch (e) { setCam('error'); setCamMsg('Scanner konnte nicht gestartet werden.'); return; }
+    camRef.current = inst;
+    inst.start({ facingMode: 'environment' }, { fps: 10, aspectRatio: 1 }, (text) => handleCode(text), () => {})
+      .catch((e) => {
+        camRef.current = null; setCam('error');
+        setCamMsg(/permission|denied|notallowed|notfounderror/i.test(String(e))
+          ? 'Kein Kamerazugriff. Erlaube die Kamera in den Browser-Einstellungen (HTTPS erforderlich).'
+          : 'Keine Kamera gefunden.');
+      });
+  };
+
+  // stop camera when leaving the scan tab / opening a detail; cleanup on unmount
+  useEffect(() => { if (tab !== 'scan' || detail) stopCamera(); }, [tab, detail, stopCamera]);
+  useEffect(() => () => stopCamera(), [stopCamera]);
 
   const STOCK_CAP = 50;
   const F = (px) => Math.round(px * T.fs);
@@ -224,21 +286,43 @@ function ScannerC({ tw, products }) {
   })();
 
   // ── scan tab ─────────────────────────────────────────────────
+  const onText = T.dark ? '#06131f' : '#fff';
   const scanTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
       <Header title="Scannen" sub="Artikel-Etikett erfassen" />
       <div style={{ flex: 1, overflow: 'auto', padding: T.pad }}>
-        <div style={{ background: T.card, borderRadius: 18, padding: 20, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ position: 'relative', width: 180, height: 180, borderRadius: 20, background: T.dark ? '#16283f' : '#eaf1f9', border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <div style={{ background: T.card, borderRadius: 18, padding: 18, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {/* camera / viewfinder */}
+          <div style={{ position: 'relative', width: '100%', maxWidth: 300, aspectRatio: '1 / 1', borderRadius: 18, background: '#06131f', border: `1px solid ${T.border}`, overflow: 'hidden' }}>
+            <div id="scanner-cam" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+            {cam !== 'live' && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.dark ? '#16283f' : '#eaf1f9' }}>
+                <div style={{ opacity: 0.55, display: 'flex' }}>{Icon.qr(T.accent, 58)}</div>
+              </div>
+            )}
             {[['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']].map(([v, h], i) => (
-              <div key={i} style={{ position: 'absolute', [v]: 16, [h]: 16, width: 26, height: 26, [`border${v[0].toUpperCase() + v.slice(1)}`]: `3px solid ${T.accent}`, [`border${h[0].toUpperCase() + h.slice(1)}`]: `3px solid ${T.accent}`, borderRadius: v === 'top' ? (h === 'left' ? '8px 0 0 0' : '0 8px 0 0') : (h === 'left' ? '0 0 0 8px' : '0 0 8px 0') }} />
+              <div key={i} style={{ position: 'absolute', [v]: 16, [h]: 16, width: 28, height: 28, pointerEvents: 'none', [`border${v[0].toUpperCase() + v.slice(1)}`]: `3px solid ${cam === 'live' ? '#fff' : T.accent}`, [`border${h[0].toUpperCase() + h.slice(1)}`]: `3px solid ${cam === 'live' ? '#fff' : T.accent}`, borderRadius: v === 'top' ? (h === 'left' ? '8px 0 0 0' : '0 8px 0 0') : (h === 'left' ? '0 0 0 8px' : '0 0 8px 0') }} />
             ))}
-            <div style={{ opacity: 0.6, display: 'flex' }}>{Icon.qr(T.accent, 58)}</div>
-            {scanning && <div className="scanline" style={{ position: 'absolute', left: 16, right: 16, height: 3, borderRadius: 3, background: `linear-gradient(90deg,transparent,${T.accent},transparent)`, boxShadow: `0 0 12px ${T.accent}` }} />}
+            {(cam === 'live' || scanning) && <div className="scanline" style={{ position: 'absolute', left: 16, right: 16, height: 3, borderRadius: 3, background: `linear-gradient(90deg,transparent,${cam === 'live' ? '#fff' : T.accent},transparent)`, boxShadow: `0 0 12px ${cam === 'live' ? '#fff' : T.accent}` }} />}
           </div>
-          <div style={{ marginTop: 16, fontWeight: 700, color: T.ink, fontSize: F(16) }}>{scanning ? 'Code wird gelesen …' : 'Bereit zum Scannen'}</div>
-          <div style={{ marginTop: 3, fontSize: F(13), color: T.mute }}>{scanning ? 'Artikel wird gesucht' : 'Kamera auf Barcode oder QR richten'}</div>
-          <button onClick={startScan} disabled={scanning} style={{ marginTop: 16, width: '100%', height: 52, borderRadius: 14, border: 'none', cursor: 'pointer', background: scanning ? T.mute : T.accent, color: T.dark ? '#06131f' : '#fff', fontSize: F(16), fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>{Icon.scan(T.dark ? '#06131f' : '#fff', 20)} Scan starten</button>
+
+          <div style={{ marginTop: 14, fontWeight: 700, color: T.ink, fontSize: F(16) }}>{cam === 'live' ? 'Kamera aktiv' : cam === 'error' ? 'Kamera nicht verfügbar' : scanning ? 'Code wird gelesen …' : 'Bereit zum Scannen'}</div>
+          <div style={{ marginTop: 3, fontSize: F(13), color: cam === 'error' ? T.stock.out : T.mute, textAlign: 'center', lineHeight: 1.4 }}>{cam === 'live' ? 'Barcode / EAN in den Rahmen halten' : cam === 'error' ? camMsg : CAM ? 'Kamera auf Barcode oder QR richten' : 'Kamera hier nicht verfügbar – EAN unten eingeben'}</div>
+
+          {notFound && <div style={{ marginTop: 12, width: '100%', boxSizing: 'border-box', background: T.chipLow, color: T.stock.out, border: `1px solid ${T.stock.out}55`, borderRadius: 10, padding: '9px 12px', fontSize: F(13), fontWeight: 600, textAlign: 'center' }}>Kein Artikel zu „{notFound}“ (EAN/Art.-Nr.)</div>}
+
+          {cam === 'live'
+            ? <button onClick={stopCamera} style={{ marginTop: 14, width: '100%', height: 52, borderRadius: 14, border: `1.5px solid ${T.border}`, cursor: 'pointer', background: 'transparent', color: T.ink, fontSize: F(16), fontWeight: 700, fontFamily: 'inherit' }}>Stopp</button>
+            : CAM
+              ? <button onClick={startCamera} style={{ marginTop: 14, width: '100%', height: 52, borderRadius: 14, border: 'none', cursor: 'pointer', background: T.accent, color: onText, fontSize: F(16), fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>{Icon.scan(onText, 20)} Kamera starten</button>
+              : <button onClick={startScan} disabled={scanning} style={{ marginTop: 14, width: '100%', height: 52, borderRadius: 14, border: 'none', cursor: 'pointer', background: scanning ? T.mute : T.accent, color: onText, fontSize: F(16), fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>{Icon.scan(onText, 20)} {scanning ? 'Scannen …' : 'Beispiel scannen (Demo)'}</button>}
+
+          {/* manual EAN entry */}
+          <div style={{ marginTop: 10, width: '100%', display: 'flex', gap: 8 }}>
+            <input value={manual} onChange={(e) => setManual(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && manual.trim()) { handleCode(manual.trim()); setManual(''); } }} placeholder="EAN oder Art.-Nr. eingeben" style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 11, border: `1px solid ${T.border}`, background: T.field, color: T.ink, padding: '0 12px', fontSize: F(15), fontFamily: 'inherit', outline: 'none' }} />
+            <button onClick={() => { if (manual.trim()) { handleCode(manual.trim()); setManual(''); } }} style={{ flexShrink: 0, height: 44, padding: '0 16px', borderRadius: 11, border: 'none', cursor: 'pointer', background: T.accentSoft, color: T.accent, fontSize: F(15), fontWeight: 700, fontFamily: 'inherit' }}>Suchen</button>
+          </div>
+          {CAM && <button onClick={startScan} style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', color: T.mute, fontSize: F(12), fontFamily: 'inherit', textDecoration: 'underline' }}>Beispiel-Artikel scannen (Demo)</button>}
         </div>
         {history.length > 0 && (
           <div style={{ marginTop: 20 }}>

@@ -137,7 +137,8 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const deactivated = rows.some((r) => /deaktiviert/i.test(nameOf(r)) || /deaktiviert/i.test(r.KATEGORIE || ''));
       if (deactivated || !(price > 0)) return null;
 
-      const art = master ? (master.ARTIKELNR || '') : artBase(scannables);
+      const art = (master && master.ARTIKELNR) ? master.ARTIKELNR : ((scannables[0] && scannables[0].ARTIKELNR) || anchor.ARTIKELNR || '');
+      const arts = [...new Set([art, ...rows.map((r) => r.ARTIKELNR)].filter(Boolean))];
       const rawImg = anchor.BILD_URL || (scannables.find((s) => s.BILD_URL) || {}).BILD_URL || '';
       const image = !rawImg ? '' : /^https?:/i.test(rawImg) ? rawImg : (window.IMAGE_BASE_URL ? window.IMAGE_BASE_URL + rawImg : '');
       const eans = rows.map((r) => r.EAN).filter(Boolean);
@@ -146,6 +147,7 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
         id: art || anchor.EAN,
         ean: anchor.EAN,
         allEans: eans,
+        allArts: arts,
         art,
         brand,
         name,
@@ -166,7 +168,7 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
         desc: '',
         note: null,
         image,
-        _s: (name + ' ' + brand + ' ' + art + ' ' + cat + ' ' + eans.join(' ')).toLowerCase(),
+        _s: (name + ' ' + brand + ' ' + arts.join(' ') + ' ' + cat + ' ' + eans.join(' ')).toLowerCase(),
       };
     }).filter(Boolean);
   }
