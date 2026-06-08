@@ -55,7 +55,11 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const [history, setHistory] = useState([]);
   const [q, setQ] = useState('');
 
-  const open = (p) => { setDetail(p); setHistory((h) => [{ p, at: Date.now() }, ...h.filter((x) => x.p.ean !== p.ean)].slice(0, 20)); };
+  // open() nimmt optional die gescannte EAN mit
+  const open = (p, scannedEan = null) => {
+    setDetail({ ...p, _scannedEan: scannedEan });
+    setHistory((h) => [{ p, at: Date.now() }, ...h.filter((x) => x.p.ean !== p.ean)].slice(0, 20));
+  };
 
   // ── real barcode scanning (html5-qrcode) + EAN lookup ────────
   const CAM = typeof Html5Qrcode !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices;
@@ -73,7 +77,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   };
 
   const camRef = useRef(null);
-  const [cam, setCam] = useState('idle'); // idle | live | error
+  const [cam, setCam] = useState('idle');
   const [camMsg, setCamMsg] = useState('');
   const [notFound, setNotFound] = useState(null);
   const [manual, setManual] = useState('');
@@ -86,9 +90,10 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     setCam((c) => (c === 'live' ? 'idle' : c));
   }, []);
 
+  // EAN beim Öffnen mitgeben
   const handleCode = (code) => {
     const p = lookup(code);
-    if (p) { setNotFound(null); stopCamera(); open(p); }
+    if (p) { setNotFound(null); stopCamera(); open(p, String(code).trim()); }
     else {
       setNotFound(String(code).trim());
       clearTimeout(nfTimer.current);
@@ -176,13 +181,19 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     const locMax = Math.max(1, ...(detail.locations || []).map((l) => l.n));
     const Tile = ({ children }) => <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>{children}</div>;
     const TileLabel = ({ icon, children }) => <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5 }}>{icon(T.mute, 14)} {children}</div>;
+
+    // Gescannte Variante ermitteln
+    const scannedVariant = detail._scannedEan && detail.variants.length > 0
+      ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === detail._scannedEan)
+      : null;
+
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
         <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', paddingTop: padTopDet, paddingLeft: 12, paddingRight: 12, paddingBottom: 11, display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button onClick={() => setDetail(null)} style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: 'pointer', background: T.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{Icon.back(T.accent, 22)}</button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 1 }}>{detail.brand} · {detail.cat}</div>
-            <div style={{ fontSize: F(15), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{detail.name}</div>
+            <div style={{ fontSize: F(15), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}</div>
           </div>
         </div>
 
@@ -190,11 +201,14 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
             <ProductPhoto product={detail} dark={T.dark} radius={T.radius} style={{ width: F(96), height: F(96), flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: F(18), fontWeight: 800, color: T.ink, lineHeight: 1.2, textWrap: 'pretty' }}>{detail.name}</div>
+              <div style={{ fontSize: F(18), fontWeight: 800, color: T.ink, lineHeight: 1.2, textWrap: 'pretty' }}>
+                {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
+              </div>
               {detail.note && <div style={{ marginTop: 6, fontSize: F(12), color: T.red, fontWeight: 600 }}>{detail.note}</div>}
             </div>
           </div>
 
+          {/* KPI tiles – bei gescannter Variante: Varianten-Bestand anzeigen */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
             <Tile>
               <TileLabel icon={Icon.tag}>Preis</TileLabel>
@@ -207,20 +221,38 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
             </Tile>
             <Tile>
-              <TileLabel icon={Icon.box}>Bestand · {detail.home || 'Coppi'}</TileLabel>
-              <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[st], marginTop: 6, lineHeight: 1 }}>{detail.stock}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span></div>
-              <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>vor Ort · {detail.stockTotal} gesamt</div>
-              <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: T.stock[st], borderRadius: 6 }} />
+              <TileLabel icon={Icon.box}>
+                {scannedVariant ? `${detail.variantLabel}: ${scannedVariant.v}` : `Bestand · ${detail.home || 'Coppi'}`}
+              </TileLabel>
+              <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[stockState(scannedVariant ? scannedVariant.n : detail.stock)], marginTop: 6, lineHeight: 1 }}>
+                {scannedVariant ? scannedVariant.n : detail.stock}
+                <span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span>
               </div>
+              <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>
+                {scannedVariant
+                  ? `vor Ort · ${scannedVariant.total} gesamt`
+                  : `vor Ort · ${detail.stockTotal} gesamt`}
+              </div>
+              {!scannedVariant && (
+                <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: T.stock[st], borderRadius: 6 }} />
+                </div>
+              )}
             </Tile>
           </div>
 
+          {/* stock by location */}
           {detail.locations && detail.locations.length > 0 && (
             <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-              <TileLabel icon={Icon.box}>Bestand nach Standort</TileLabel>
+              <TileLabel icon={Icon.box}>Bestand nach Standort{scannedVariant ? ` · ${scannedVariant.v}` : ''}</TileLabel>
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {detail.locations.map((loc) => (
+                {(scannedVariant
+                  ? Object.entries(scannedVariant.locs).map(([key, n]) => {
+                      const loc = detail.locations.find((l) => l.key === key) || { key, label: key, home: false };
+                      return { ...loc, n };
+                    })
+                  : detail.locations
+                ).map((loc) => (
                   <div key={loc.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 96, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: F(13), fontWeight: loc.home ? 700 : 500, color: loc.home ? T.accent : T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.label}</span>
@@ -236,6 +268,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
+          {/* variant grid – gescannte Variante hervorheben */}
           {detail.variants.length > 0 && (
             <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
               <TileLabel icon={Icon.box}>{detail.variantLabel} · vor Ort ({detail.home || 'Coppi'})</TileLabel>
@@ -247,8 +280,16 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
                   const low = here > 0 && here <= 2;
                   const bg = outAll ? T.chipOut : (onlyElse || low) ? T.chipLow : T.chipOk;
                   const col = outAll ? T.mute : (onlyElse || low) ? T.stock.low : T.stock.ok;
+                  const isScanned = detail._scannedEan
+                    ? (vr.ean && String(vr.ean).trim() === detail._scannedEan)
+                    : false;
                   return (
-                    <div key={vr.v} style={{ borderRadius: 10, padding: '7px 4px', textAlign: 'center', background: bg, border: `1px solid ${T.border}` }}>
+                    <div key={vr.v} style={{
+                      borderRadius: 10, padding: '7px 4px', textAlign: 'center',
+                      background: isScanned ? T.accentSoft : bg,
+                      border: isScanned ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
+                    }}>
+                      {isScanned && <div style={{ fontSize: F(8), fontWeight: 700, color: T.accent, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>✓ Gescannt</div>}
                       <div style={{ fontSize: F(13), fontWeight: 700, color: outAll ? T.mute : T.ink, textDecoration: outAll ? 'line-through' : 'none' }}>{vr.v}</div>
                       <div style={{ fontSize: F(12), fontWeight: 700, marginTop: 2, color: col }}>{here}</div>
                       {onlyElse && <div style={{ fontSize: F(9), color: T.stock.low, marginTop: 1 }}>+{elsewhere} woanders</div>}
@@ -274,7 +315,8 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             ))}
           </div>
           <div style={{ marginTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
-            <span>Art. {detail.art}</span><span>EAN {detail.ean}</span>
+            <span>Art. {detail.art}</span>
+            <span>EAN {detail._scannedEan || detail.ean}</span>
           </div>
         </div>
 
