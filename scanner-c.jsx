@@ -118,8 +118,22 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     try { inst = new Html5Qrcode('scanner-cam', { formatsToSupport: F2, verbose: false }); }
     catch (e) { setCam('error'); setCamMsg('Scanner konnte nicht gestartet werden.'); return; }
     camRef.current = inst;
-    inst.start({ facingMode: 'environment' }, { fps: 10, aspectRatio: 1 }, (text) => handleCode(text), () => {})
-      .catch((e) => {
+    inst.start(
+      { facingMode: 'environment' },
+      {
+        fps: 15,                              // FIX: mehr Frames → schnelleres Erkennen
+        qrbox: { width: 250, height: 120 },   // FIX: rechteckig → optimal für EAN-13
+        aspectRatio: 1.7778,                  // FIX: 16:9 statt 1:1 → mehr Kamerabild
+        videoConstraints: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },             // FIX: höhere Auflösung für kleine Etiketten
+          height: { ideal: 720 },
+          focusMode: 'continuous',            // FIX: Autofokus erzwingen (wichtigste Änderung!)
+        },
+      },
+      (text) => handleCode(text),
+      () => {}
+    ).catch((e) => {
         camRef.current = null; setCam('error');
         setCamMsg(/permission|denied|notallowed|notfounderror/i.test(String(e))
           ? 'Kein Kamerazugriff. Erlaube die Kamera in den Browser-Einstellungen (HTTPS erforderlich).'
@@ -314,7 +328,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <div style={{ marginTop: 14, fontWeight: 700, color: T.ink, fontSize: F(16) }}>{cam === 'live' ? 'Kamera aktiv' : cam === 'error' ? 'Kamera nicht verfügbar' : scanning ? 'Code wird gelesen …' : 'Bereit zum Scannen'}</div>
           <div style={{ marginTop: 3, fontSize: F(13), color: cam === 'error' ? T.stock.out : T.mute, textAlign: 'center', lineHeight: 1.4 }}>{cam === 'live' ? 'Barcode / EAN in den Rahmen halten' : cam === 'error' ? camMsg : CAM ? 'Kamera auf Barcode oder QR richten' : 'Kamera hier nicht verfügbar – EAN unten eingeben'}</div>
 
-          {notFound && <div style={{ marginTop: 12, width: '100%', boxSizing: 'border-box', background: T.chipLow, color: T.stock.out, border: `1px solid ${T.stock.out}55`, borderRadius: 10, padding: '9px 12px', fontSize: F(13), fontWeight: 600, textAlign: 'center' }}>Kein Artikel zu „{notFound}“ (EAN/Art.-Nr.)</div>}
+          {notFound && <div style={{ marginTop: 12, width: '100%', boxSizing: 'border-box', background: T.chipLow, color: T.stock.out, border: `1px solid ${T.stock.out}55`, borderRadius: 10, padding: '9px 12px', fontSize: F(13), fontWeight: 600, textAlign: 'center' }}>Kein Artikel zu „{notFound}" (EAN/Art.-Nr.)</div>}
 
           {cam === 'live'
             ? <button onClick={stopCamera} style={{ marginTop: 14, width: '100%', height: 52, borderRadius: 14, border: `1.5px solid ${T.border}`, cursor: 'pointer', background: 'transparent', color: T.ink, fontSize: F(16), fontWeight: 700, fontFamily: 'inherit' }}>Stopp</button>
@@ -340,7 +354,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   );
 
   // ── search tab ───────────────────────────────────────────────
-  // ── search tab (catalog can be very large → require 2 chars, cap results) ──
   const q2 = q.trim().toLowerCase();
   const SEARCH_CAP = 40;
   const matches = q2.length >= 2
@@ -366,7 +379,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             {matches.length > SEARCH_CAP && <div style={{ textAlign: 'center', color: T.mute, fontSize: F(12), padding: '8px 0 4px' }}>+{(matches.length - SEARCH_CAP).toLocaleString('de-DE')} weitere · Suche verfeinern</div>}
           </>
         ) : (
-          <div style={{ textAlign: 'center', color: T.mute, marginTop: 50, fontSize: F(14) }}>Keine Treffer für „{q}“</div>
+          <div style={{ textAlign: 'center', color: T.mute, marginTop: 50, fontSize: F(14) }}>Keine Treffer für „{q}"</div>
         )}
       </div>
     </div>
