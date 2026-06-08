@@ -129,4 +129,15 @@ const Icon = {
 const STOCK_COLOR = { ok: '#1f8a4c', low: '#c98a00', out: '#c8102e' };
 const STOCK_COLOR_DARK = { ok: '#34d27b', low: '#ffc24b', out: '#ff5d6e' };
 
+// ── ATLANTIS global helpers (EUR formatter + stockState) ──────
+window.ATLANTIS = {
+  EUR: (v) => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n)
+      ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+      : '—';
+  },
+  stockState: (n) => (n == null || n <= 0 ? 'out' : n <= 3 ? 'low' : 'ok'),
+};
+
 window.AUI = { AtlantisMark, ProductPhoto, Icon, STOCK_COLOR, STOCK_COLOR_DARK };
