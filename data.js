@@ -144,7 +144,7 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
         home: HOME.label,
         locations,
         variantLabel: isVariantProduct ? (varying.length === 1 ? varying[0] : 'Ausführung') : null,
-        variants: variants.map(({ v, n, total, locs }) => ({ v, n, total, locs })),
+        variants: variants.map(({ v, n, total, locs, ean }) => ({ v, n, total, locs, ean })),
         specs: [
           ['Hersteller', anchor.MARKE || brand || '—'],
           ['Art.-Nr.', art || '—'],
