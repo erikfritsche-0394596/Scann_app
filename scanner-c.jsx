@@ -90,11 +90,18 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     setCam((c) => (c === 'live' ? 'idle' : c));
   }, []);
 
-  // EAN beim Öffnen mitgeben
+  // EAN oder Art.-Nr. beim Öffnen mitgeben
   const handleCode = (code) => {
-    const p = lookup(code);
-    if (p) { setNotFound(null); stopCamera(); open(p, String(code).trim()); }
-    else {
+    const result = lookup(code);
+    if (result) {
+      setNotFound(null);
+      stopCamera();
+      // scannedEan: bei EAN-Treffer die EAN; bei Art.-Nr.-Treffer die EAN der Variante (falls bekannt)
+      const scannedEan = result.isEan
+        ? result.code
+        : (result.variant && result.variant.ean ? String(result.variant.ean).trim() : null);
+      open(result.product, scannedEan);
+    } else {
       setNotFound(String(code).trim());
       clearTimeout(nfTimer.current);
       nfTimer.current = setTimeout(() => setNotFound(null), 3500);
