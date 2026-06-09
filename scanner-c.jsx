@@ -99,7 +99,10 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   };
 
   // ── NEU: Shop-Daten aus Google Sheets ───────────────────────────────────
-  const [shopIndex, setShopIndex] = useState({}); // { model_lowercase: { id, catNr } }
+  // shopIndex: { model_lowercase: { id, catNr, masterId } }
+  // masterIndex: { masterId: { model, catNr } }  ← für Master-Art.-Nr. und Shop-URL
+  const [shopIndex, setShopIndex] = useState({});
+  const [masterIndex, setMasterIndex] = useState({});
   const [shopLoading, setShopLoading] = useState(false);
   const [shopLoaded, setShopLoaded] = useState(false);
 
@@ -111,61 +114,60 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       .then((csv) => {
         const lines = csv.trim().split('\n');
         const idx = {};
-        // Erste Zeile = Header: PRODUCTS_MODEL, PRODUCTS_ID, CATEGORIES_WWS_NR
+        const midx = {};
+        // Header: PRODUCTS_MODEL, PRODUCTS_ID, CATEGORIES_WWS_NR, MASTER_ID
         for (let i = 1; i < lines.length; i++) {
           const cols = lines[i].split(',');
-          if (cols.length >= 3) {
-            const model = cols[0].trim().toLowerCase().replace(/^"+|"+$/g, '');
-            const id    = cols[1].trim().replace(/^"+|"+$/g, '');
-            const catNr = cols[2].trim().replace(/^"+|"+$/g, '');
-            if (model && id && catNr) {
-              idx[model] = { id, catNr };
-            }
+          if (cols.length < 3) continue;
+          const clean = (v) => (v || '').trim().replace(/^"+|"+$/g, '');
+          const model    = clean(cols[0]).toLowerCase();
+          const id       = clean(cols[1]);
+          const catNr    = clean(cols[2]);
+          const masterId = clean(cols[3]);
+          if (!model || !id || !catNr) continue;
+          idx[model] = { id, catNr, masterId };
+          // Wenn keine masterId → dieser Eintrag selbst ist der Master
+          if (!masterId) {
+            midx[id] = { model, catNr };
           }
         }
         setShopIndex(idx);
+        setMasterIndex(midx);
         setShopLoaded(true);
       })
-      .catch(() => {
-        setShopLoaded(true); // auch bei Fehler: laden abgeschlossen
-      })
+      .catch(() => { setShopLoaded(true); })
       .finally(() => setShopLoading(false));
   }, []);
 
-  // Shop-URL für ein Produkt ermitteln (art = Art.-Nr. der Variante oder des Produkts)
+  // Shop-URL: immer auf den Masterartikel zeigen
   const getShopUrl = (art) => {
     if (!art || !shopLoaded) return null;
-    // Probiere verschiedene Varianten: z.B. "pol-78015xs" oder "pol-78015XS"
     const key = String(art).trim().toLowerCase();
     const entry = shopIndex[key];
     if (!entry) return null;
+    // Slave → masterId → Master-Eintrag holen
+    const masterEntry = entry.masterId ? masterIndex[entry.masterId] : null;
+    if (masterEntry) {
+      return `https://www.atlantis-onlineshop.de/${masterEntry.catNr}/p-${entry.masterId}.html`;
+    }
+    // Kein masterId → dieser Artikel selbst ist der Master
     return `https://www.atlantis-onlineshop.de/${entry.catNr}/p-${entry.id}.html`;
   };
 
-  // Master-Art.-Nr. aus Varianten-Art.-Nr. ableiten: "pol-78015xs" → "pol-78015master"
-  // Strategie: gemeinsamen Präfix aller Varianten finden, dann "master" anhängen.
-  // Fallback: Art.-Nr. des Produkts nehmen und Suffix ersetzen.
+  // Master-Art.-Nr.: direkt aus dem Shop-Index holen (masterId → model)
   const getMasterArt = (product) => {
     if (!product) return null;
-    // Wenn Produkt selbst eine masterArt hat → nehmen
-    if (product.masterArt) return product.masterArt;
-    // Aus Varianten-Art.-Nrn. den Basisteil ermitteln
-    const arts = (product.variants || []).map((v) => v.art).filter(Boolean);
-    if (arts.length === 0 && product.art) {
-      // Kein Varianten-Art.-Nr.: Suffix entfernen (letztes 2-3 Zeichen nach gängigem Muster)
-      return product.art.replace(/[a-z0-9]{1,5}$/i, 'master');
+    if (!shopLoaded) return null;
+    // Alle Art.-Nrn. des Produkts durchsuchen
+    const arts = [product.art, ...(product.variants || []).map((v) => v.art)].filter(Boolean);
+    for (const art of arts) {
+      const entry = shopIndex[art.trim().toLowerCase()];
+      if (!entry) continue;
+      const masterEntry = entry.masterId ? masterIndex[entry.masterId] : null;
+      if (masterEntry) return masterEntry.model; // z.B. "pol-78015master"
+      if (!entry.masterId) return entry.model;   // Artikel ist selbst Master
     }
-    if (arts.length === 1) return arts[0].replace(/[a-z0-9]{1,5}$/i, 'master');
-    // Gemeinsamen Präfix finden
-    let prefix = arts[0];
-    for (let i = 1; i < arts.length; i++) {
-      let j = 0;
-      while (j < prefix.length && j < arts[i].length && prefix[j] === arts[i][j]) j++;
-      prefix = prefix.slice(0, j);
-    }
-    // Prefix bereinigen: endet evtl. auf Trennzeichen
-    prefix = prefix.replace(/[-_]+$/, '');
-    return prefix ? prefix + 'master' : null;
+    return null;
   };
 
   // open() nimmt optional die gescannte EAN mit
