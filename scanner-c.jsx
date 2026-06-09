@@ -1,6 +1,6 @@
 // Atlantis Sommerfest Scanner — final app (Direction C "Regal"), theme-aware.
 // Tab bar (Scannen / Suche / Verlauf) + data-dense detail with KPI tiles,
-// stock meter, per-variant grid and spec table. Driven by Tweaks.
+// stock meter, per-variant dropdown and spec table. Driven by Tweaks.
 /* global React, ATLANTIS, AUI */
 
 const ACCENTS = {
@@ -172,6 +172,134 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     );
   };
 
+  // ── VariantDropdown ──────────────────────────────────────────
+  // Zeigt die gescannte Variante prominent + alle anderen im Dropdown
+  function VariantDropdown({ detail, T, F, EUR, stockState }) {
+    const [open, setOpen] = useState(false);
+
+    const scannedVariant = detail._scannedEan && detail.variants.length > 0
+      ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === detail._scannedEan)
+      : null;
+
+    const otherVariants = detail.variants.filter((vr) =>
+      !scannedVariant || !vr.ean || String(vr.ean).trim() !== detail._scannedEan
+    );
+
+    // Wenn kein Scan-kontext: kein Dropdown nötig
+    if (!detail.variants || detail.variants.length === 0) return null;
+
+    const variantStockColor = (vr) => {
+      const here = vr.n;
+      if (here <= 0) return T.stock.out;
+      if (here <= 2) return T.stock.low;
+      return T.stock.ok;
+    };
+
+    const VariantRow = ({ vr, isScanned = false }) => {
+      const here = vr.n;
+      const total = vr.total || here;
+      const elsewhere = total - here;
+      const outAll = here === 0 && elsewhere <= 0;
+      const onlyElse = here === 0 && elsewhere > 0;
+      const low = here > 0 && here <= 2;
+
+      return (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: `${F(10)}px ${F(14)}px`,
+          background: isScanned ? T.accentSoft : 'transparent',
+          borderBottom: `1px solid ${T.border}`,
+          borderLeft: isScanned ? `3px solid ${T.accent}` : '3px solid transparent',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isScanned && (
+                <span style={{ fontSize: F(9), fontWeight: 700, color: T.accent, background: T.accentSoft, border: `1px solid ${T.accent}44`, padding: '1px 6px', borderRadius: 5, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>
+                  gescannt
+                </span>
+              )}
+              <span style={{
+                fontSize: F(14), fontWeight: isScanned ? 700 : 500,
+                color: outAll ? T.mute : T.ink,
+                textDecoration: outAll ? 'line-through' : 'none',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                {detail.variantLabel}: {vr.v}
+              </span>
+            </div>
+            {onlyElse && (
+              <div style={{ fontSize: F(11), color: T.stock.low, marginTop: 2 }}>
+                nicht vor Ort · {elsewhere} in anderen Standorten
+              </div>
+            )}
+          </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontSize: F(18), fontWeight: 800, color: variantStockColor(vr), lineHeight: 1 }}>
+              {here}
+              <span style={{ fontSize: F(11), fontWeight: 500, color: T.mute }}> Stk</span>
+            </div>
+            {total > here && (
+              <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>
+                {total} gesamt
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, overflow: 'hidden' }}>
+
+        {/* Gescannte Variante prominent oben */}
+        {scannedVariant && <VariantRow vr={scannedVariant} isScanned />}
+
+        {/* Wenn keine spezifische Variante gescannt: alle direkt zeigen (z.B. Suche) */}
+        {!scannedVariant && detail.variants.map((vr) => (
+          <VariantRow key={vr.v} vr={vr} isScanned={false} />
+        ))}
+
+        {/* Dropdown-Toggle für andere Varianten (nur wenn eine bestimmte gescannt wurde) */}
+        {scannedVariant && otherVariants.length > 0 && (
+          <>
+            <button
+              onClick={() => setOpen((o) => !o)}
+              style={{
+                width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                borderTop: open ? `1px solid ${T.border}` : 'none',
+                cursor: 'pointer', fontFamily: 'inherit',
+                padding: `${F(11)}px ${F(14)}px`,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              }}
+            >
+              <span style={{ fontSize: F(13), fontWeight: 600, color: T.accent }}>
+                {open ? 'Andere Ausführungen ausblenden' : `Andere Ausführungen anzeigen (${otherVariants.length})`}
+              </span>
+              {/* Chevron rotiert */}
+              <svg
+                width={18} height={18} viewBox="0 0 24 24" fill="none"
+                style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}
+              >
+                <path d="M6 9l6 6 6-6" stroke={T.accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            {/* Ausgeklappt: alle anderen Varianten */}
+            {open && (
+              <div style={{ borderTop: `1px solid ${T.border}` }}>
+                {otherVariants.map((vr) => (
+                  <VariantRow key={vr.v} vr={vr} isScanned={false} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }
+
   // ── detail ───────────────────────────────────────────────────
   const detailScreen = detail && (() => {
     const st = stockState(detail.stock);
@@ -183,21 +311,40 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     const TileLabel = ({ icon, children }) => <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5 }}>{icon(T.mute, 14)} {children}</div>;
 
     // Gescannte Variante ermitteln
-    const scannedVariant = detail._scannedEan && detail.variants.length > 0
+    const scannedVariant = detail._scannedEan && detail.variants && detail.variants.length > 0
       ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === detail._scannedEan)
       : null;
 
+    // Bestand: wenn Variante gescannt → Varianten-Bestand, sonst Produkt-Bestand
+    const displayStock = scannedVariant ? scannedVariant.n : detail.stock;
+    const displayStockTotal = scannedVariant ? scannedVariant.total : detail.stockTotal;
+    const displayStockState = stockState(displayStock);
+
+    // Standorte: wenn Variante gescannt → Varianten-Locs, sonst Produkt-Locs
+    const displayLocs = scannedVariant
+      ? Object.entries(scannedVariant.locs).map(([key, n]) => {
+          const loc = detail.locations.find((l) => l.key === key) || { key, label: key, home: false };
+          return { ...loc, n };
+        })
+      : detail.locations;
+
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
+
+        {/* Header */}
         <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', paddingTop: padTopDet, paddingLeft: 12, paddingRight: 12, paddingBottom: 11, display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button onClick={() => setDetail(null)} style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: 'pointer', background: T.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{Icon.back(T.accent, 22)}</button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 1 }}>{detail.brand} · {detail.cat}</div>
-            <div style={{ fontSize: F(15), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}</div>
+            <div style={{ fontSize: F(15), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
+            </div>
           </div>
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', padding: T.pad }}>
+
+          {/* Foto + Name */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
             <ProductPhoto product={detail} dark={T.dark} radius={T.radius} style={{ width: F(96), height: F(96), flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
@@ -208,7 +355,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           </div>
 
-          {/* KPI tiles – bei gescannter Variante: Varianten-Bestand anzeigen */}
+          {/* KPI tiles */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
             <Tile>
               <TileLabel icon={Icon.tag}>Preis</TileLabel>
@@ -222,37 +369,31 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </Tile>
             <Tile>
               <TileLabel icon={Icon.box}>
-                {scannedVariant ? `${detail.variantLabel}: ${scannedVariant.v}` : `Bestand · ${detail.home || 'Coppi'}`}
+                {scannedVariant
+                  ? `${detail.variantLabel}: ${scannedVariant.v}`
+                  : `Bestand · ${detail.home || 'Coppi'}`}
               </TileLabel>
-              <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[stockState(scannedVariant ? scannedVariant.n : detail.stock)], marginTop: 6, lineHeight: 1 }}>
-                {scannedVariant ? scannedVariant.n : detail.stock}
+              <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[displayStockState], marginTop: 6, lineHeight: 1 }}>
+                {displayStock}
                 <span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span>
               </div>
               <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>
-                {scannedVariant
-                  ? `vor Ort · ${scannedVariant.total} gesamt`
-                  : `vor Ort · ${detail.stockTotal} gesamt`}
+                vor Ort · {displayStockTotal} gesamt
               </div>
-              {!scannedVariant && (
-                <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: T.stock[st], borderRadius: 6 }} />
-                </div>
-              )}
+              <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
+                <div style={{ width: `${displayStockTotal ? Math.round((displayStock / displayStockTotal) * 100) : 0}%`, height: '100%', background: T.stock[displayStockState], borderRadius: 6 }} />
+              </div>
             </Tile>
           </div>
 
-          {/* stock by location */}
-          {detail.locations && detail.locations.length > 0 && (
+          {/* Bestand nach Standort */}
+          {displayLocs && displayLocs.length > 0 && (
             <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-              <TileLabel icon={Icon.box}>Bestand nach Standort{scannedVariant ? ` · ${scannedVariant.v}` : ''}</TileLabel>
+              <TileLabel icon={Icon.box}>
+                Bestand nach Standort{scannedVariant ? ` · ${scannedVariant.v}` : ''}
+              </TileLabel>
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {(scannedVariant
-                  ? Object.entries(scannedVariant.locs).map(([key, n]) => {
-                      const loc = detail.locations.find((l) => l.key === key) || { key, label: key, home: false };
-                      return { ...loc, n };
-                    })
-                  : detail.locations
-                ).map((loc) => (
+                {displayLocs.map((loc) => (
                   <div key={loc.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ width: 96, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: F(13), fontWeight: loc.home ? 700 : 500, color: loc.home ? T.accent : T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.label}</span>
@@ -268,36 +409,15 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
-          {/* variant grid – gescannte Variante hervorheben */}
-          {detail.variants.length > 0 && (
-            <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-              <TileLabel icon={Icon.box}>{detail.variantLabel} · vor Ort ({detail.home || 'Coppi'})</TileLabel>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))', gap: 8, marginTop: 10 }}>
-                {detail.variants.map((vr) => {
-                  const here = vr.n, elsewhere = (vr.total || here) - here;
-                  const outAll = here === 0 && elsewhere <= 0;
-                  const onlyElse = here === 0 && elsewhere > 0;
-                  const low = here > 0 && here <= 2;
-                  const bg = outAll ? T.chipOut : (onlyElse || low) ? T.chipLow : T.chipOk;
-                  const col = outAll ? T.mute : (onlyElse || low) ? T.stock.low : T.stock.ok;
-                  const isScanned = detail._scannedEan
-                    ? (vr.ean && String(vr.ean).trim() === detail._scannedEan)
-                    : false;
-                  return (
-                    <div key={vr.v} style={{
-                      borderRadius: 10, padding: '7px 4px', textAlign: 'center',
-                      background: isScanned ? T.accentSoft : bg,
-                      border: isScanned ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
-                    }}>
-                      {isScanned && <div style={{ fontSize: F(8), fontWeight: 700, color: T.accent, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>✓ Gescannt</div>}
-                      <div style={{ fontSize: F(13), fontWeight: 700, color: outAll ? T.mute : T.ink, textDecoration: outAll ? 'line-through' : 'none' }}>{vr.v}</div>
-                      <div style={{ fontSize: F(12), fontWeight: 700, marginTop: 2, color: col }}>{here}</div>
-                      {onlyElse && <div style={{ fontSize: F(9), color: T.stock.low, marginTop: 1 }}>+{elsewhere} woanders</div>}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* ── Varianten-Dropdown (neu) ── */}
+          {detail.variants && detail.variants.length > 0 && (
+            <VariantDropdown
+              detail={detail}
+              T={T}
+              F={F}
+              EUR={EUR}
+              stockState={stockState}
+            />
           )}
 
           {detail.desc && (
@@ -306,6 +426,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
+          {/* Spec-Tabelle */}
           <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, overflow: 'hidden', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
             {detail.specs.map(([k, v], i) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, background: i % 2 && !T.dark ? '#fafbfd' : 'transparent', borderTop: i ? `1px solid ${T.border}` : 'none' }}>
@@ -314,6 +435,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               </div>
             ))}
           </div>
+
           <div style={{ marginTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
             <span>Art. {detail.art}</span>
             <span>EAN {detail._scannedEan || detail.ean}</span>
