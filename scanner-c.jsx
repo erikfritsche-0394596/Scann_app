@@ -172,130 +172,225 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     );
   };
 
-  // ── VariantDropdown ──────────────────────────────────────────
-  // Zeigt die gescannte Variante prominent + alle anderen im Dropdown
-  function VariantDropdown({ detail, T, F, EUR, stockState }) {
-    const [open, setOpen] = useState(false);
-
-    const scannedVariant = detail._scannedEan && detail.variants.length > 0
-      ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === detail._scannedEan)
-      : null;
-
-    const otherVariants = detail.variants.filter((vr) =>
-      !scannedVariant || !vr.ean || String(vr.ean).trim() !== detail._scannedEan
-    );
-
-    // Wenn kein Scan-kontext: kein Dropdown nötig
+  // ── VariantAccordion (Idee B) ─────────────────────────────────
+  // Gruppiert Varianten nach dem ersten Attribut (z.B. Farbe).
+  // Gescannte Farb-Gruppe ist automatisch offen.
+  // Jede Größe kann aufgeklappt werden → zeigt Bestand pro Standort.
+  function VariantAccordion({ detail, T, F, stockState }) {
     if (!detail.variants || detail.variants.length === 0) return null;
 
-    const variantStockColor = (vr) => {
-      const here = vr.n;
-      if (here <= 0) return T.stock.out;
-      if (here <= 2) return T.stock.low;
-      return T.stock.ok;
+    const scannedEan = detail._scannedEan || null;
+    const LOCS = detail.locations || [];
+
+    // Variante die gescannt wurde
+    const scannedVariant = scannedEan
+      ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === scannedEan)
+      : null;
+
+    // Farb-Gruppen bilden: "Farbe · Größe" → split auf ' · '
+    // variantLabel z.B. "Farbe" oder "Ausführung" oder "Größe"
+    // v z.B. "Schwarz/Lilie · M/3" oder "Schwarz/Aqua · S/2" oder nur "M/3"
+    const buildGroups = () => {
+      const groups = {};
+      detail.variants.forEach((vr) => {
+        const parts = vr.v ? vr.v.split(' · ') : [vr.v];
+        const groupKey = parts.length > 1 ? parts[0] : 'Alle';
+        const sizeKey  = parts.length > 1 ? parts.slice(1).join(' · ') : parts[0];
+        if (!groups[groupKey]) groups[groupKey] = [];
+        groups[groupKey].push({ ...vr, _groupKey: groupKey, _sizeKey: sizeKey });
+      });
+      return groups;
     };
 
-    const VariantRow = ({ vr, isScanned = false }) => {
-      const here = vr.n;
-      const total = vr.total || here;
-      const elsewhere = total - here;
-      const outAll = here === 0 && elsewhere <= 0;
-      const onlyElse = here === 0 && elsewhere > 0;
-      const low = here > 0 && here <= 2;
+    const groups = buildGroups();
+    const groupKeys = Object.keys(groups);
+    const multiGroup = groupKeys.length > 1;
 
+    // Welche Farbgruppe ist gescannt?
+    const scannedGroup = scannedVariant
+      ? (scannedVariant.v ? scannedVariant.v.split(' · ')[0] : groupKeys[0])
+      : null;
+
+    // State: offene Farbgruppe(n) + offene Größe(n)
+    const [openGroups, setOpenGroups] = useState(() => {
+      const init = {};
+      if (scannedGroup) init[scannedGroup] = true;
+      else if (groupKeys.length === 1) init[groupKeys[0]] = true;
+      return init;
+    });
+    const [openSizes, setOpenSizes] = useState(() => {
+      if (scannedEan) return { [scannedEan]: true };
+      return {};
+    });
+
+    const toggleGroup = (key) =>
+      setOpenGroups((o) => ({ ...o, [key]: !o[key] }));
+    const toggleSize = (ean) =>
+      setOpenSizes((o) => ({ ...o, [ean]: !o[ean] }));
+
+    const stockColor = (n) =>
+      n <= 0 ? T.stock.out : n <= 2 ? T.stock.low : T.stock.ok;
+
+    // Standort-Bestand als Mini-Balkenzeilen
+    const LocBars = ({ vr }) => {
+      if (!vr.locs || Object.keys(vr.locs).length === 0) return null;
+      const locMax = Math.max(1, ...Object.values(vr.locs));
       return (
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: `${F(10)}px ${F(14)}px`,
-          background: isScanned ? T.accentSoft : 'transparent',
-          borderBottom: `1px solid ${T.border}`,
-          borderLeft: isScanned ? `3px solid ${T.accent}` : '3px solid transparent',
+          background: T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc',
+          borderTop: `1px solid ${T.border}`,
+          padding: `${F(7)}px ${F(14)}px ${F(7)}px ${F(28)}px`,
         }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {isScanned && (
-                <span style={{ fontSize: F(9), fontWeight: 700, color: T.accent, background: T.accentSoft, border: `1px solid ${T.accent}44`, padding: '1px 6px', borderRadius: 5, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>
+          {LOCS.map((loc) => {
+            const n = vr.locs[loc.key] ?? 0;
+            const pct = Math.round((n / locMax) * 100);
+            return (
+              <div key={loc.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{
+                  width: F(74), flexShrink: 0,
+                  fontSize: F(11), fontWeight: loc.home ? 700 : 400,
+                  color: loc.home ? T.accent : T.mute,
+                }}>
+                  {loc.label}
+                  {loc.home && <span style={{ marginLeft: 4, fontSize: F(8), fontWeight: 700, color: T.accent, background: T.accentSoft, padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>hier</span>}
+                </span>
+                <div style={{ flex: 1, height: 5, borderRadius: 5, background: T.dark ? 'rgba(255,255,255,0.08)' : '#dde4ee', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: n === 0 ? 'transparent' : loc.home ? T.accent : (T.dark ? 'rgba(231,239,247,0.35)' : '#9fb0c6') }} />
+                </div>
+                <span style={{ width: F(22), textAlign: 'right', fontSize: F(12), fontWeight: 700, color: n ? T.ink : T.mute }}>{n}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+    };
+
+    // Eine Größen-Zeile (mit optionalem Standort-Aufklapper)
+    const SizeRow = ({ vr }) => {
+      const isScannedRow = scannedEan && vr.ean && String(vr.ean).trim() === scannedEan;
+      const isOpen = openSizes[vr.ean];
+      const cop = vr.n;
+      const tot = vr.total || cop;
+      const hasLocs = vr.locs && Object.keys(vr.locs).length > 0;
+
+      return (
+        <div>
+          <button
+            onClick={() => hasLocs && toggleSize(vr.ean)}
+            style={{
+              width: '100%', textAlign: 'left', border: 'none', cursor: hasLocs ? 'pointer' : 'default',
+              fontFamily: 'inherit', padding: `${F(9)}px ${F(14)}px`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              background: isScannedRow
+                ? (T.dark ? 'rgba(110,164,234,0.1)' : 'rgba(26,60,110,0.05)')
+                : 'transparent',
+              borderLeft: isScannedRow ? `3px solid ${T.accent}` : '3px solid transparent',
+              borderTop: `1px solid ${T.border}`,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+              {isScannedRow && (
+                <span style={{ fontSize: F(9), fontWeight: 700, color: T.accent, background: T.accentSoft, border: `1px solid ${T.accent}44`, padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4, flexShrink: 0 }}>
                   gescannt
                 </span>
               )}
-              <span style={{
-                fontSize: F(14), fontWeight: isScanned ? 700 : 500,
-                color: outAll ? T.mute : T.ink,
-                textDecoration: outAll ? 'line-through' : 'none',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {detail.variantLabel}: {vr.v}
+              <span style={{ fontSize: F(13), fontWeight: isScannedRow ? 700 : 500, color: T.ink }}>
+                {vr._sizeKey}
               </span>
+              {vr.art && (
+                <span style={{ fontSize: F(10), color: T.mute, fontFamily: 'ui-monospace, Menlo, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {vr.art}
+                </span>
+              )}
             </div>
-            {onlyElse && (
-              <div style={{ fontSize: F(11), color: T.stock.low, marginTop: 2 }}>
-                nicht vor Ort · {elsewhere} in anderen Standorten
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: F(14), fontWeight: 700, color: stockColor(cop), lineHeight: 1 }}>
+                  {cop} <span style={{ fontSize: F(10), fontWeight: 500, color: T.mute }}>Coppi</span>
+                </div>
+                {tot !== cop && (
+                  <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>{tot} gesamt</div>
+                )}
               </div>
-            )}
-          </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontSize: F(18), fontWeight: 800, color: variantStockColor(vr), lineHeight: 1 }}>
-              {here}
-              <span style={{ fontSize: F(11), fontWeight: 500, color: T.mute }}> Stk</span>
+              {hasLocs && (
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
+                  style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.18s ease', opacity: 0.5 }}>
+                  <path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
             </div>
-            {total > here && (
-              <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>
-                {total} gesamt
-              </div>
-            )}
-          </div>
+          </button>
+          {isOpen && hasLocs && <LocBars vr={vr} />}
         </div>
+      );
+    };
+
+    // Farbgruppen-Header
+    const GroupHeader = ({ groupKey, items }) => {
+      const isScannedGrp = groupKey === scannedGroup;
+      const isOpen = openGroups[groupKey];
+      const coppiSum = items.reduce((a, vr) => a + vr.n, 0);
+      const totSum = items.reduce((a, vr) => a + (vr.total || vr.n), 0);
+
+      return (
+        <button
+          onClick={() => toggleGroup(groupKey)}
+          style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer',
+            fontFamily: 'inherit', border: 'none',
+            padding: `${F(10)}px ${F(14)}px`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            background: isScannedGrp
+              ? (T.dark ? 'rgba(110,164,234,0.1)' : 'rgba(26,60,110,0.06)')
+              : (T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc'),
+            borderTop: `1px solid ${T.border}`,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {isScannedGrp && (
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3M3 12h18" stroke={T.accent} strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            )}
+            <span style={{ fontSize: F(13), fontWeight: 700, color: isScannedGrp ? T.accent : T.ink }}>
+              {groupKey}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: F(11), color: T.mute }}>
+              <span style={{ color: stockColor(coppiSum), fontWeight: 700 }}>{coppiSum}</span> vor Ort · {totSum} ges.
+            </span>
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
+              style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.18s ease', opacity: 0.5 }}>
+              <path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </button>
       );
     };
 
     return (
       <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, overflow: 'hidden' }}>
+        {/* Tile-Header */}
+        <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5, padding: `${F(10)}px ${F(14)}px`, borderBottom: `1px solid ${T.border}` }}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" stroke={T.mute} strokeWidth="2" strokeLinejoin="round"/><path d="M3 7l9 4 9-4M12 11v10" stroke={T.mute} strokeWidth="2" strokeLinejoin="round"/></svg>
+          Alle Ausführungen
+        </div>
 
-        {/* Gescannte Variante prominent oben */}
-        {scannedVariant && <VariantRow vr={scannedVariant} isScanned />}
-
-        {/* Wenn keine spezifische Variante gescannt: alle direkt zeigen (z.B. Suche) */}
-        {!scannedVariant && detail.variants.map((vr) => (
-          <VariantRow key={vr.v} vr={vr} isScanned={false} />
+        {/* Wenn nur eine Gruppe (kein Farbattribut): direkt die Größen zeigen */}
+        {!multiGroup && groups[groupKeys[0]].map((vr) => (
+          <SizeRow key={vr.ean || vr.v} vr={vr} />
         ))}
 
-        {/* Dropdown-Toggle für andere Varianten (nur wenn eine bestimmte gescannt wurde) */}
-        {scannedVariant && otherVariants.length > 0 && (
-          <>
-            <button
-              onClick={() => setOpen((o) => !o)}
-              style={{
-                width: '100%', textAlign: 'left', background: 'none', border: 'none',
-                borderTop: open ? `1px solid ${T.border}` : 'none',
-                cursor: 'pointer', fontFamily: 'inherit',
-                padding: `${F(11)}px ${F(14)}px`,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-              }}
-            >
-              <span style={{ fontSize: F(13), fontWeight: 600, color: T.accent }}>
-                {open ? 'Andere Ausführungen ausblenden' : `Andere Ausführungen anzeigen (${otherVariants.length})`}
-              </span>
-              {/* Chevron rotiert */}
-              <svg
-                width={18} height={18} viewBox="0 0 24 24" fill="none"
-                style={{ flexShrink: 0, transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}
-              >
-                <path d="M6 9l6 6 6-6" stroke={T.accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-
-            {/* Ausgeklappt: alle anderen Varianten */}
-            {open && (
-              <div style={{ borderTop: `1px solid ${T.border}` }}>
-                {otherVariants.map((vr) => (
-                  <VariantRow key={vr.v} vr={vr} isScanned={false} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        {/* Mehrere Gruppen: Accordion */}
+        {multiGroup && groupKeys.map((gk) => (
+          <div key={gk}>
+            <GroupHeader groupKey={gk} items={groups[gk]} />
+            {openGroups[gk] && groups[gk].map((vr) => (
+              <SizeRow key={vr.ean || vr.v} vr={vr} />
+            ))}
+          </div>
+        ))}
       </div>
     );
   }
@@ -409,13 +504,12 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
-          {/* ── Varianten-Dropdown (neu) ── */}
+          {/* ── Varianten-Accordion (Idee B) ── */}
           {detail.variants && detail.variants.length > 0 && (
-            <VariantDropdown
+            <VariantAccordion
               detail={detail}
               T={T}
               F={F}
-              EUR={EUR}
               stockState={stockState}
             />
           )}
@@ -437,7 +531,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           </div>
 
           <div style={{ marginTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
-            <span>Art. {detail.art}</span>
+            <span>Art. {scannedVariant && scannedVariant.art ? scannedVariant.art : detail.art}</span>
             <span>EAN {detail._scannedEan || detail.ean}</span>
           </div>
         </div>
