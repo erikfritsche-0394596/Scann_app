@@ -363,10 +363,12 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.brand}{time ? ` · ${time}` : ''}</div>
           <div style={{ fontSize: F(14), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
             <span style={{ fontSize: F(14), fontWeight: 800, color: sale ? T.red : standortAccent }}>{EUR(sale ? p.sale : p.price)}</span>
             <StockDot st={st} size={7} />
             <span style={{ fontSize: F(12), color: T.mute }}>{pStockCur} Stk</span>
+            {p.inactive && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
+            {p.restposten && <span style={{ fontSize: F(10), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '1px 5px', borderRadius: 4 }}>Restposten</span>}
           </div>
         </div>
         {Icon.chevron(T.mute, 20)}
@@ -573,7 +575,18 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               <div style={{ fontSize: F(18), fontWeight: 800, color: T.ink, lineHeight: 1.2, textWrap: 'pretty' }}>
                 {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
               </div>
-              {detail.note && <div style={{ marginTop: 6, fontSize: F(12), color: T.red, fontWeight: 600 }}>{detail.note}</div>}
+              <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {detail.inactive && (
+                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #f59e0b55', padding: '2px 8px', borderRadius: 6 }}>
+                    ⚠ Artikel inaktiv
+                  </span>
+                )}
+                {detail.restposten && (
+                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', border: '1px solid #f9731655', padding: '2px 8px', borderRadius: 6 }}>
+                    🏷 Restposten
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
