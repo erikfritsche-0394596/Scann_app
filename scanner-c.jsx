@@ -321,7 +321,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const ListRow = ({ p, time }) => {
     const pStockCur = getProductStock(p);
     const st = stockState(pStockCur);
-    const sale = p.sale != null && p.price > 0;
+    const sale = p.sale != null && p.sale > p.price;
     return (
       <button onClick={() => open(p)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: T.card, border: `1px solid ${T.border}`, borderRadius: T.radius, padding: T.pad - 2, display: 'flex', gap: 12, alignItems: 'center', boxShadow: T.tileShadow, fontFamily: 'inherit' }}>
         <ProductPhoto product={p} dark={T.dark} radius={10} style={{ width: F(52), height: F(52), flexShrink: 0 }} />
@@ -329,7 +329,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.brand}{time ? ` · ${time}` : ''}</div>
           <div style={{ fontSize: F(14), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: F(14), fontWeight: 800, color: sale ? T.red : standortAccent }}>{EUR(sale ? p.sale : p.price)}</span>
+            <span style={{ fontSize: F(14), fontWeight: 800, color: sale ? T.red : standortAccent }}>{EUR(p.price)}</span>
             <StockDot st={st} size={7} />
             <span style={{ fontSize: F(12), color: T.mute }}>{pStockCur} Stk</span>
             {p.inactive && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
@@ -431,8 +431,8 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               {vr.price > 0 && (
-                <span style={{ fontSize: F(12), fontWeight: 700, color: vr.sale > 0 ? T.red : standortAccent, whiteSpace: 'nowrap' }}>
-                  {EUR(vr.sale > 0 ? vr.sale : vr.price)}
+                <span style={{ fontSize: F(12), fontWeight: 700, color: (vr.sale != null && vr.sale > vr.price) ? T.red : standortAccent, whiteSpace: 'nowrap' }}>
+                  {EUR(vr.price)}
                 </span>
               )}
               <div style={{ textAlign: 'right' }}>
@@ -485,8 +485,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   // ── detail ───────────────────────────────────────────────────
   const detailScreen = detail && (() => {
-    const sale = detail.sale != null && detail.price > 0;
-    const save = sale ? Math.round((1 - detail.sale / detail.price) * 100) : 0;
+    // price = Verkaufspreis (PREIS), sale = Streichpreis (UVP) — nur gesetzt wenn günstiger
+    const sale = detail.sale != null && detail.sale > detail.price;
+    const save = sale ? Math.round((1 - detail.price / detail.sale) * 100) : 0;
     const Tile = ({ children }) => <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>{children}</div>;
     const TileLabel = ({ icon, children }) => <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5 }}>{icon(T.mute, 14)} {children}</div>;
 
@@ -623,10 +624,10 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
               <Tile>
                 <TileLabel icon={Icon.tag}>{scannedVariant ? `Preis · ${scannedVariant.v}` : 'Preis'}</TileLabel>
-                <div style={{ fontSize: F(24), fontWeight: 800, color: sale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>{EUR(sale ? detail.sale : detail.price)}</div>
+                <div style={{ fontSize: F(24), fontWeight: 800, color: sale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>{EUR(detail.price)}</div>
                 {sale ? (
                   <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.price)}</span>
+                    <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.sale)}</span>
                     <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
                   </div>
                 ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
