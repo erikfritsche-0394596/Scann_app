@@ -547,6 +547,11 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               {vr.art && <span style={{ fontSize: F(10), color: T.mute, fontFamily: 'ui-monospace, Menlo, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{vr.art}</span>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {vr.price > 0 && (
+                <span style={{ fontSize: F(12), fontWeight: 700, color: vr.sale > 0 ? T.red : standortAccent, whiteSpace: 'nowrap' }}>
+                  {EUR(vr.sale > 0 ? vr.sale : vr.price)}
+                </span>
+              )}
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: F(14), fontWeight: 700, color: stockColor(cop), lineHeight: 1 }}>{cop} <span style={{ fontSize: F(10), fontWeight: 500, color: T.mute }}>{standort.shortLabel}</span></div>
                 {tot !== cop && <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>{tot} gesamt</div>}
@@ -632,9 +637,66 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     const currentArt = scannedVariant && scannedVariant.art ? scannedVariant.art : detail.art;
     const shopUrl = getShopUrl(currentArt);
 
+    // Für Slave: eigene Shop-URL (direkter Link auf den Slave-Artikel)
+    const getDirectShopUrl = (art) => {
+      if (!art || !shopLoaded) return null;
+      const key = String(art).trim().toLowerCase();
+      const entry = shopIndex[key];
+      if (!entry) return null;
+      return 'https://www.atlantis-onlineshop.de/' + entry.catNr + '/p-' + entry.id + '.html';
+    };
+    const slaveShopUrl = !isMasterDetail ? getDirectShopUrl(currentArt) : null;
+    const shopBtnUrl = slaveShopUrl || shopUrl;
+
     // ── Slave-Artikel: alle Artikel die zu diesem Master gehören ──
     const isMasterDetail = !!detail.isMaster;
     const slaveProducts = isMasterDetail ? getSlavesForMaster(detail) : [];
+
+    // Master mit Slaves und ohne Preis → Gesamtbestand anzeigen
+    const isMasterWithSlaves = isMasterDetail && slaveProducts.length > 0 && !(detail.price > 0);
+    const slavesTotalCoppi = isMasterWithSlaves
+      ? slaveProducts.reduce((s, p) => s + getProductStock(p), 0)
+      : 0;
+    const slavesTotalAll = isMasterWithSlaves
+      ? slaveProducts.reduce((s, p) => s + getProductTotalStock(p), 0)
+      : 0;
+
+    // masterShopUrl: Link zum Masterartikel (für Slave-Ansicht)
+    // shopUrl zeigt beim Slave auf den Slave, masterShopUrl auf den Master
+    const masterProduct = !isMasterDetail ? slaveToMasterIndex[String(currentArt || '').trim().toLowerCase()] : null;
+    const masterShopUrl = masterProduct ? getShopUrl(masterProduct.art) : null;
+
+    // Slave-Accordion: alle Geschwister gruppiert nach Farbe/Gruppe (für Slave-Ansicht)
+    // Wir bauen virtuelle variants aus slaveProducts für den VariantAccordion
+    const siblingVariants = !isMasterDetail && masterProduct
+      ? getSlavesForMaster(masterProduct).map((sp) => ({
+          v:     sp.name.replace(masterProduct.name, '').replace(/^[\s·\-–]+/, '').trim() || sp.art,
+          n:     getProductStock(sp),
+          total: getProductTotalStock(sp),
+          locs:  sp.locations ? Object.fromEntries(sp.locations.map((l) => [l.key, l.n])) : {},
+          ean:   sp.ean,
+          art:   sp.art,
+          image: sp.image,
+          price: sp.price,
+          sale:  sp.sale,
+          _isSibling: true,
+        }))
+      : null;
+
+    // Master-Accordion: alle slaveProducts als virtuelle variants
+    const masterVariants = isMasterWithSlaves
+      ? slaveProducts.map((sp) => ({
+          v:     sp.name.replace(detail.name, '').replace(/^[\s·\-–]+/, '').trim() || sp.art,
+          n:     getProductStock(sp),
+          total: getProductTotalStock(sp),
+          locs:  sp.locations ? Object.fromEntries(sp.locations.map((l) => [l.key, l.n])) : {},
+          ean:   sp.ean,
+          art:   sp.art,
+          image: sp.image,
+          price: sp.price,
+          sale:  sp.sale,
+        }))
+      : null;
 
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
@@ -677,30 +739,42 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           </div>
 
           {/* KPI tiles */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
-            <Tile>
-              <TileLabel icon={Icon.tag}>Preis</TileLabel>
-              <div style={{ fontSize: F(24), fontWeight: 800, color: sale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>{EUR(sale ? detail.sale : detail.price)}</div>
-              {sale ? (
-                <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.price)}</span>
-                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
+          {isMasterWithSlaves ? (
+            <div style={{ marginTop: T.gap + 4 }}>
+              <Tile>
+                <TileLabel icon={Icon.box}>Gesamtbestand aller Ausführungen · {standort.label}</TileLabel>
+                <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[stockState(slavesTotalCoppi)], marginTop: 6, lineHeight: 1 }}>
+                  {slavesTotalCoppi}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk vor Ort</span>
                 </div>
-              ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
-            </Tile>
-            <Tile>
-              <TileLabel icon={Icon.box}>
-                {scannedVariant ? `${detail.variantLabel}: ${scannedVariant.v}` : `Bestand · ${standort.label}`}
-              </TileLabel>
-              <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[displayStockState], marginTop: 6, lineHeight: 1 }}>
-                {displayStock}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span>
-              </div>
-              <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>vor Ort · {displayStockTotal} gesamt</div>
-              <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
-                <div style={{ width: `${displayStockTotal ? Math.round((displayStock / displayStockTotal) * 100) : 0}%`, height: '100%', background: T.stock[displayStockState], borderRadius: 6 }} />
-              </div>
-            </Tile>
-          </div>
+                <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>{slavesTotalAll} Stk gesamt · {slaveProducts.length} Ausführungen</div>
+              </Tile>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
+              <Tile>
+                <TileLabel icon={Icon.tag}>{scannedVariant ? `Preis · ${scannedVariant.v}` : 'Preis'}</TileLabel>
+                <div style={{ fontSize: F(24), fontWeight: 800, color: sale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>{EUR(sale ? detail.sale : detail.price)}</div>
+                {sale ? (
+                  <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.price)}</span>
+                    <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
+                  </div>
+                ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
+              </Tile>
+              <Tile>
+                <TileLabel icon={Icon.box}>
+                  {scannedVariant ? `${detail.variantLabel || 'Ausführung'}: ${scannedVariant.v}` : `Bestand · ${standort.label}`}
+                </TileLabel>
+                <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[displayStockState], marginTop: 6, lineHeight: 1 }}>
+                  {displayStock}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span>
+                </div>
+                <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>vor Ort · {displayStockTotal} gesamt</div>
+                <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
+                  <div style={{ width: `${displayStockTotal ? Math.round((displayStock / displayStockTotal) * 100) : 0}%`, height: '100%', background: T.stock[displayStockState], borderRadius: 6 }} />
+                </div>
+              </Tile>
+            </div>
+          )}
 
           {/* Bestand nach Standort */}
           {displayLocs && displayLocs.length > 0 && (
@@ -723,8 +797,18 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
-          {/* Varianten-Accordion */}
-          {detail.variants && detail.variants.length > 0 && (
+          {/* Ausführungen-Accordion: für Master aus slaveProducts, für Slave aus siblings, für normale Artikel aus variants */}
+          {isMasterWithSlaves && masterVariants && masterVariants.length > 0 && (
+            <VariantAccordion detail={{ ...detail, variants: masterVariants, variantLabel: 'Ausführung', _scannedEan: null }} T={T} F={F} stockState={stockState} />
+          )}
+          {!isMasterDetail && siblingVariants && siblingVariants.length > 0 && (
+            <VariantAccordion detail={{ ...detail, variants: siblingVariants, variantLabel: 'Ausführung', _scannedEan: detail._scannedEan || detail.ean }} T={T} F={F} stockState={stockState} />
+          )}
+          {!isMasterWithSlaves && isMasterDetail && detail.variants && detail.variants.length > 0 && (
+            <VariantAccordion detail={detail} T={T} F={F} stockState={stockState} />
+          )}
+          {/* Normale Artikel ohne Master-Kontext */}
+          {!isMasterDetail && !siblingVariants && detail.variants && detail.variants.length > 0 && (
             <VariantAccordion detail={detail} T={T} F={F} stockState={stockState} />
           )}
 
@@ -734,62 +818,39 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
-          {/* Spec-Tabelle: nur Hersteller, Master-Art.-Nr., Kategorie */}
+          {/* Spec-Tabelle */}
           <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, overflow: 'hidden', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
             {[
-              detail.brand   ? ['Hersteller',     detail.brand,  false] : null,
-              masterArt      ? ['Master-Art.-Nr.', masterArt,    true]  : null,
-              detail.cat     ? ['Kategorie',       detail.cat,   false] : null,
+              detail.brand ? ['Hersteller', detail.brand, false] : null,
+              detail.cat   ? ['Kategorie',  detail.cat,   false] : null,
             ].filter(Boolean).map(([k, v, mono], i) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, background: i % 2 && !T.dark ? '#fafbfd' : 'transparent', borderTop: i ? `1px solid ${T.border}` : 'none' }}>
                 <span style={{ color: T.mute, fontSize: F(13) }}>{k}</span>
                 <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right', fontFamily: mono ? 'ui-monospace, Menlo, monospace' : 'inherit' }}>{v}</span>
               </div>
             ))}
+            {/* Master-Link: nur für Slave-Artikel, öffnet Master im Onlineshop */}
+            {!isMasterDetail && masterProduct && masterShopUrl && (
+              <a
+                href={masterShopUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  gap: 16, padding: `${T.pad - 4}px ${T.pad}px`,
+                  borderTop: `1px solid ${T.border}`,
+                  textDecoration: 'none', cursor: 'pointer',
+                  background: T.dark ? `${standortAccent}0d` : `${standortAccent}07`,
+                }}
+              >
+                <span style={{ color: T.mute, fontSize: F(13) }}>Master-Artikel</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: standortAccent, fontSize: F(13), fontWeight: 700, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+                  {masterProduct.art}
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </span>
+              </a>
+            )}
           </div>
-
-          {/* ── Slave-Artikel des Masters ── */}
-          {isMasterDetail && slaveProducts.length > 0 && (
-            <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, overflow: 'hidden', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-              <div style={{ padding: `${T.pad - 2}px ${T.pad}px ${T.pad - 6}px`, borderBottom: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>
-                  Zugehörige Slave-Artikel ({slaveProducts.length})
-                </div>
-              </div>
-              {slaveProducts.map((sp, i) => {
-                const spStock = getProductStock(sp);
-                const spTotal = getProductTotalStock(sp);
-                const spState = stockState(spStock);
-                return (
-                  <button
-                    key={sp.id || i}
-                    onClick={() => open(sp)}
-                    style={{
-                      width: '100%', textAlign: 'left', cursor: 'pointer',
-                      background: i % 2 && !T.dark ? '#fafbfd' : T.card,
-                      border: 'none', borderTop: `1px solid ${T.border}`,
-                      padding: `${T.pad - 3}px ${T.pad}px`,
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <ProductPhoto product={sp} dark={T.dark} radius={6} style={{ width: F(40), height: F(40), flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: F(13), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.name}</div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>{sp.art}</span>
-                        {sp.ean && <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>EAN {sp.ean}</span>}
-                      </div>
-                    </div>
-                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
-                      <div style={{ fontSize: F(14), fontWeight: 800, color: T.stock[spState] }}>{spStock}</div>
-                      <div style={{ fontSize: F(10), color: T.mute }}>/{spTotal} Stk</div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           {/* Art.-Nr. + EAN Footer */}
           <div style={{ marginTop: 10, marginBottom: shopUrl ? 4 : 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
@@ -797,10 +858,10 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <span>EAN {detail._scannedEan || detail.ean}</span>
           </div>
 
-          {/* ── NEU: Onlineshop-Link ── */}
-          {shopUrl && (
+          {/* Onlineshop-Button: Slave → Slave-URL, Master/Einzelartikel → Master-URL */}
+          {shopBtnUrl && (
             <a
-              href={shopUrl}
+              href={shopBtnUrl}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -816,13 +877,13 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Im Onlineshop anzeigen
+              {!isMasterDetail && slaveShopUrl ? 'Artikel im Onlineshop anzeigen' : 'Im Onlineshop anzeigen'}
             </a>
           )}
-          {shopLoading && !shopUrl && (
+          {shopLoading && !shopBtnUrl && (
             <div style={{ textAlign: 'center', fontSize: F(11), color: T.mute, marginBottom: T.gap }}>Shop-Daten werden geladen…</div>
           )}
-          {shopLoaded && !shopUrl && !shopLoading && (
+          {shopLoaded && !shopBtnUrl && !shopLoading && (
             <div style={{ textAlign: 'center', fontSize: F(11), color: T.mute, marginBottom: T.gap }}>Kein Onlineshop-Eintrag gefunden</div>
           )}
         </div>
