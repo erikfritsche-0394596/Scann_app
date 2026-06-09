@@ -1,4 +1,4 @@
-// Atlantis live data source
+// Atlantis live data source — vereinfacht: jede Zeile = ein Produkt-Objekt
 // Spalten: ARTIKELNR EAN NAME PREIS Coppi Zentrallager Steglitz Freiburg Hamburg
 //          MASTER_SLAVE UVP MARKE KATEGORIE BILD_URL STATUS RESTPOSTEN ATLOS_URL MASTER_MODEL
 window.DATA_SOURCE_URL = 'https://docs.google.com/spreadsheets/d/1qu5AvF6iWvPISBCpYUtiSjdTEqXlQrO0Qtm5-jTVZLE/export?format=csv&gid=0';
@@ -36,8 +36,23 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
   }
 
   // ── Hilfsfunktionen ───────────────────────────────────────────
-  const num = (v) => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
-  const NA  = (v) => !v || /^#?\s*n\/?a\s*#?$/i.test(v.trim());
+  // num() versteht deutsche Zahlen: "34,99" → 34.99, "1.234,56" → 1234.56
+  const num = (v) => {
+    const s = String(v).trim();
+    // Hat die Zahl sowohl Punkt als auch Komma → Punkt ist Tausender, Komma ist Dezimal
+    // Hat die Zahl nur ein Komma → Komma ist Dezimal
+    // Hat die Zahl nur Punkte → letzter Punkt ist Dezimal wenn ≤2 Stellen danach, sonst Tausender
+    let n;
+    if (s.includes(',')) {
+      // Deutsch: Punkt = Tausender, Komma = Dezimal
+      n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    } else {
+      n = parseFloat(s);
+    }
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const NA = (v) => !v || /^#?\s*n\/?a\s*#?$/i.test(String(v).trim());
 
   function cleanBrand(marke) {
     if (NA(marke)) return '';
@@ -45,6 +60,7 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
     b = b.replace(/\b(S\.?p\.?A\.?|S\.?r\.?l\.?|GmbH|AG|Oy|Inc\.?|Co\.?|KG|Ltd\.?|Outdoors)\b/gi, '').replace(/[.,\s]+$/, '').trim();
     return b || (marke || '').trim();
   }
+
   function cleanCat(kat) {
     if (NA(kat)) return 'Sonstiges';
     const parts = (kat || '').split(/\s[-–]\s/);
@@ -60,159 +76,83 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
     LOCATIONS.forEach((L) => { o[L.key] = Math.round(num(r[L.col] || 0)); });
     return o;
   }
-  const sumLocs = (list) => {
-    const o = {};
-    LOCATIONS.forEach((L) => { o[L.key] = list.reduce((a, r) => a + (r[L.key] || 0), 0); });
-    return o;
-  };
-
-  // Variantenname aus Produktname extrahieren (Farbe/Größe-Notation)
-  const ATTR_START = /(Farbe|Gr(?:ö|oe|o)(?:ß|ss|s)e)\s*:/i;
-  function baseName(name) {
-    const m = name.match(ATTR_START);
-    const b = m ? name.slice(0, m.index) : name;
-    return b.replace(/[\s\-–•]+$/, '').trim();
-  }
-  function parseAttrs(name) {
-    const size  = (name.match(/Gr(?:ö|oe|o)(?:ß|ss|s)e\s*:\s*([^-–|]+)/i) || [])[1];
-    const color = (name.match(/Farbe\s*:\s*([^-–|]+)/i) || [])[1];
-    return { Größe: size && size.trim(), Farbe: color && color.trim() };
-  }
 
   // ── mapRows ───────────────────────────────────────────────────
+  // Jede Zeile wird direkt zu einem Produkt-Objekt.
+  // Master-Zeilen (MASTER_SLAVE = "M") werden als eigene Objekte angelegt,
+  // aber haben keinen Preis/Bestand — sie dienen nur als Lookup-Anker für
+  // den Shop-Link und die slaveArts-Liste.
+  // Slave-Zeilen (MASTER_SLAVE = "S") haben alle eigenen vollständigen Daten.
   function mapRows(records) {
-    const groups = {};
-
+    // Erster Pass: alle Art.-Nrn. der Slaves je Master sammeln
+    // masterArt → [slaveArt, slaveArt, ...]
+    const masterSlaveMap = {};
     records.forEach((r) => {
-      const isMaster = (r.MASTER_SLAVE || '').toUpperCase() === 'M';
       const masterModel = (r.MASTER_MODEL || '').trim();
-      let key;
-
-      if (isMaster) {
-        key = (r.ARTIKELNR || '').trim().toLowerCase();
-      } else if (masterModel) {
-        key = masterModel.toLowerCase();
-      } else {
-        const brand = cleanBrand(r.MARKE);
-        key = (baseName(r.NAME || r.PRODUCTS_NAME || '') + '|' + brand).toLowerCase();
+      const art = (r.ARTIKELNR || '').trim();
+      const isSlave = (r.MASTER_SLAVE || '').toUpperCase() === 'S' || ((r.MASTER_SLAVE || '') === '' && masterModel !== '');
+      if (isSlave && masterModel) {
+        (masterSlaveMap[masterModel.toLowerCase()] ||= []).push(art);
       }
-      (groups[key] ||= []).push(r);
     });
 
-    return Object.values(groups).map((rows) => {
-      const nameOf  = (r) => r.NAME || r.PRODUCTS_NAME || '';
-      const master  = rows.find((r) => (r.MASTER_SLAVE || '').toUpperCase() === 'M');
-      let scannables = rows.filter((r) => (r.MASTER_SLAVE || '').toUpperCase() !== 'M');
-      if (!scannables.length) scannables = master ? [master] : rows;
-      const anchor  = master || scannables[0];
-      const brand   = cleanBrand(anchor.MARKE);
-      const cat     = cleanCat(anchor.KATEGORIE);
+    // Zweiter Pass: jede Zeile → Produkt-Objekt
+    return records.map((r) => {
+      const isMaster = (r.MASTER_SLAVE || '').toUpperCase() === 'M';
+      const art      = (r.ARTIKELNR || '').trim();
+      const ean      = (r.EAN || '').trim();
+      const name     = (r.NAME || '').trim();
+      const masterModel = (r.MASTER_MODEL || '').trim();
 
-      // Varianten-Erkennung
-      const attrRows = scannables.map((r) => ({ r, a: parseAttrs(nameOf(r)), loc: locsOf(r) }));
-      const distinct = (k) => [...new Set(attrRows.map((x) => x.a[k]).filter(Boolean))];
-      const varying  = ['Farbe', 'Größe'].filter((k) => distinct(k).length > 1);
-      const constants = ['Farbe', 'Größe'].filter((k) => distinct(k).length === 1);
-      const isVariantProduct = scannables.length > 1;
-      const effectiveVarying = varying.length > 0 ? varying : null;
+      const locs      = locsOf(r);
+      const stockHome = locs[HOME.key];
+      const stockTotal = LOCATIONS.reduce((a, L) => a + locs[L.key], 0);
+      const locations = LOCATIONS.map((L) => ({ key: L.key, label: L.label, home: !!L.home, n: locs[L.key] }));
 
-      let name = baseName(nameOf(anchor));
-      if (effectiveVarying) constants.forEach((k) => { const v = distinct(k)[0]; if (v) name += ` · ${v}`; });
-
-      // Varianten bauen
-      // PREIS = aktueller Verkaufspreis, UVP = Listenpreis/Streichpreis
-      // Sale = wenn PREIS < UVP (Artikel ist günstiger als Listenpreis)
-      const variants = isVariantProduct ? attrRows.map((x) => {
-        const vUvp   = num(x.r.UVP);
-        const vPrice = num(x.r.PREIS);
-        const vOnSale = vUvp > 0 && vPrice > 0 && vPrice < vUvp - 0.001;
-        const vLabel = effectiveVarying
-          ? effectiveVarying.map((k) => x.a[k]).filter(Boolean).join(' · ')
-          : (baseName(nameOf(x.r)) !== baseName(nameOf(anchor))
-              ? baseName(nameOf(x.r)).replace(baseName(nameOf(anchor)), '').replace(/^[\s\-–·]+/, '').trim()
-              : '') || (x.r.ARTIKELNR || '').split('-').pop();
-        return {
-          v:     vLabel,
-          n:     x.loc[HOME.key],
-          total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
-          locs:  x.loc,
-          ean:   x.r.EAN,
-          art:   x.r.ARTIKELNR || '',
-          image: resolveImg(x.r.BILD_URL || ''),
-          // price = Verkaufspreis (PREIS), sale = Streichpreis (UVP) nur wenn günstiger
-          price: vPrice,
-          sale:  vOnSale ? vUvp : null,
-          shopUrl: (x.r.ATLOS_URL || '').trim() || null,
-        };
-      }) : [];
-
-      // Gesamtbestand
-      const allLocRows   = attrRows.map((x) => x.loc);
-      const totalsByLoc  = sumLocs(allLocRows);
-      const locations    = LOCATIONS.map((L) => ({ key: L.key, label: L.label, home: !!L.home, n: totalsByLoc[L.key] }));
-      const stockTotal   = locations.reduce((a, l) => a + l.n, 0);
-
-      // Preis des Anker-Artikels
-      // PREIS = Verkaufspreis, UVP = Listenpreis
-      // Sale = wenn PREIS < UVP
-      const uvp    = num(anchor.UVP);
-      const price  = num(anchor.PREIS);
+      // Preis: PREIS = Verkaufspreis, UVP = Listenpreis (Streichpreis wenn höher)
+      const price  = num(r.PREIS);
+      const uvp    = num(r.UVP);
       const onSale = uvp > 0 && price > 0 && price < uvp - 0.001;
 
-      // Status
-      const statusVal     = (anchor.STATUS || anchor.Status || scannables[0]?.STATUS || scannables[0]?.Status || '').trim();
-      const restpostenVal = (anchor.RESTPOSTEN || anchor.Restposten || scannables[0]?.RESTPOSTEN || scannables[0]?.Restposten || '').trim().toUpperCase();
+      const brand = cleanBrand(r.MARKE);
+      const cat   = cleanCat(r.KATEGORIE);
+      const image = resolveImg(r.BILD_URL || '');
+      const shopUrl = (r.ATLOS_URL || '').trim() || null;
+
+      const statusVal     = (r.STATUS || '').trim();
+      const restpostenVal = (r.RESTPOSTEN || '').trim().toUpperCase();
       const isInactive    = statusVal === '0';
       const isRestposten  = restpostenVal === 'JA';
 
-      // Art.-Nr. + EAN
-      const art  = (master?.ARTIKELNR) || scannables[0]?.ARTIKELNR || anchor.ARTIKELNR || '';
-      const arts = [...new Set([art, ...rows.map((r) => r.ARTIKELNR)].filter(Boolean))];
-      const eans = rows.map((r) => r.EAN).filter(Boolean);
-
-      // Bild
-      const rawImg = anchor.BILD_URL || (scannables.find((s) => s.BILD_URL) || {}).BILD_URL || '';
-      const image  = resolveImg(rawImg);
-
-      // Shop-URL
-      const shopUrl = (anchor.ATLOS_URL || '').trim() || null;
-
-      // Master/Slave-Flags
-      const isMasterProduct = !!master;
-      const slaveArts = scannables.map((r) => r.ARTIKELNR).filter(Boolean).filter((a) => a !== art);
+      // slaveArts: nur für Master-Artikel befüllt
+      const slaveArts = isMaster ? (masterSlaveMap[art.toLowerCase()] || []) : [];
 
       return {
-        id:           art || anchor.EAN,
-        ean:          anchor.EAN,
-        allEans:      eans,
-        allArts:      arts,
+        id:         art || ean,
+        ean,
+        allEans:    ean ? [ean] : [],
         art,
-        brand,
+        allArts:    art ? [art] : [],
         name,
+        brand,
         cat,
-        // price = Verkaufspreis (PREIS), sale = Streichpreis (UVP) nur wenn günstiger
-        price:        price,
-        sale:         onSale ? uvp : null,
-        stock:        totalsByLoc[HOME.key],
+        price,
+        sale:       onSale ? uvp : null,
+        stock:      stockHome,
         stockTotal,
-        home:         HOME.label,
         locations,
-        variantLabel: isVariantProduct ? (varying.length === 1 ? varying[0] : 'Ausführung') : null,
-        variants:     variants,
-        desc:         '',
-        note:         isInactive && isRestposten ? 'Artikel inaktiv · Restposten'
-                      : isInactive   ? 'Artikel inaktiv'
-                      : isRestposten ? 'Restposten'
-                      : null,
-        inactive:     isInactive,
-        restposten:   isRestposten,
+        locs,
         image,
         shopUrl,
-        isMaster:     isMasterProduct,
-        slaveArts,
-        _s: (name + ' ' + brand + ' ' + arts.join(' ') + ' ' + cat + ' ' + eans.join(' ')).toLowerCase(),
+        isMaster,
+        masterArt:  masterModel || null,   // Art.-Nr. des zugehörigen Masters (nur bei Slaves)
+        slaveArts,                          // Art.-Nrn. aller Slaves (nur bei Mastern)
+        inactive:   isInactive,
+        restposten: isRestposten,
+        variants:   [],  // nicht mehr genutzt — Geschwister werden live über slaveArts geladen
+        _s: (name + ' ' + brand + ' ' + art + ' ' + cat + ' ' + ean).toLowerCase(),
       };
-    }).filter(Boolean);
+    }).filter((p) => p.id);  // Zeilen ohne Art.-Nr. und EAN verwerfen
   }
 
   // ── Fetch ─────────────────────────────────────────────────────
