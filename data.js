@@ -125,6 +125,13 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const image = !rawImg ? '' : /^https?:/i.test(rawImg) ? rawImg : (window.IMAGE_BASE_URL ? window.IMAGE_BASE_URL + rawImg : '');
       const eans = rows.map((r) => r.EAN).filter(Boolean);
 
+      // Master/Slave direkt aus Rohdaten
+      const isMasterProduct = !!master;
+      const slaveArts = scannables
+        .map((r) => r.ARTIKELNR)
+        .filter(Boolean)
+        .filter((a) => a !== art);
+
       return {
         id: art || anchor.EAN,
         ean: anchor.EAN,
@@ -150,6 +157,8 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
         desc: '',
         note: null,
         image,
+        isMaster: isMasterProduct,
+        slaveArts,
         _s: (name + ' ' + brand + ' ' + arts.join(' ') + ' ' + cat + ' ' + eans.join(' ')).toLowerCase(),
       };
     }).filter(Boolean);
