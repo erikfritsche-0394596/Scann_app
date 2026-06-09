@@ -24,8 +24,6 @@ const STANDORTE = [
 const ALL_LOC_KEYS = STANDORTE.map((s) => s.key);
 
 // Google Sheets CSV-URL (öffentlich lesbar)
-const SHOP_SHEET_URL = 'https://docs.google.com/spreadsheets/d/15QoBa8-rMu4v2xBUy-b2bVoHfqO1eXupGK8sVJb6zKE/export?format=csv&gid=0';
-
 function tokens({ accent: accentLight, dark = false, density = 'komfortabel', big = false }) {
   const acc = Object.values(ACCENTS).find((a) => a.light === accentLight) || ACCENTS.navy;
   const accent = dark ? acc.dark : acc.light;
@@ -98,76 +96,12 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return p.stockTotal ?? p.stock ?? 0;
   };
 
-  // ── NEU: Shop-Daten aus Google Sheets ───────────────────────────────────
-  // shopIndex: { model_lowercase: { id, catNr, masterId } }
-  // masterIndex: { masterId: { model, catNr } }  ← für Master-Art.-Nr. und Shop-URL
-  const [shopIndex, setShopIndex] = useState({});
-  const [masterIndex, setMasterIndex] = useState({});
-  const [shopLoading, setShopLoading] = useState(false);
-  const [shopLoaded, setShopLoaded] = useState(false);
-
-  useEffect(() => {
-    if (shopLoaded || shopLoading) return;
-    setShopLoading(true);
-    fetch(SHOP_SHEET_URL)
-      .then((r) => r.text())
-      .then((csv) => {
-        const lines = csv.trim().split('\n');
-        const idx = {};
-        const midx = {};
-        // Header: PRODUCTS_MODEL, PRODUCTS_ID, CATEGORIES_WWS_NR, MASTER_ID
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(',');
-          if (cols.length < 3) continue;
-          const clean = (v) => (v || '').trim().replace(/^"+|"+$/g, '');
-          const model    = clean(cols[0]).toLowerCase();
-          const id       = clean(cols[1]);
-          const catNr    = clean(cols[2]);
-          const masterId = clean(cols[3]);
-          if (!model || !id || !catNr) continue;
-          idx[model] = { id, catNr, masterId };
-          // Wenn keine masterId → dieser Eintrag selbst ist der Master
-          if (!masterId) {
-            midx[id] = { model, catNr };
-          }
-        }
-        setShopIndex(idx);
-        setMasterIndex(midx);
-        setShopLoaded(true);
-      })
-      .catch(() => { setShopLoaded(true); })
-      .finally(() => setShopLoading(false));
-  }, []);
-
-  // Shop-URL: immer auf den Masterartikel zeigen
-  const getShopUrl = (art) => {
-    if (!art || !shopLoaded) return null;
-    const key = String(art).trim().toLowerCase();
-    const entry = shopIndex[key];
-    if (!entry) return null;
-    // Slave → masterId → Master-Eintrag holen
-    const masterEntry = entry.masterId ? masterIndex[entry.masterId] : null;
-    if (masterEntry) {
-      return `https://www.atlantis-onlineshop.de/${masterEntry.catNr}/p-${entry.masterId}.html`;
-    }
-    // Kein masterId → dieser Artikel selbst ist der Master
-    return `https://www.atlantis-onlineshop.de/${entry.catNr}/p-${entry.id}.html`;
-  };
-
-  // Master-Art.-Nr.: direkt aus dem Shop-Index holen (masterId → model)
+  // Shop-URL und Master-Art.-Nr. kommen jetzt direkt aus den Produktdaten (Spalte ATLOS_URL / MASTER_MODEL)
+  // Kein zweites Google Sheet mehr nötig.
+  const getShopUrl = (product) => (product && product.shopUrl) || null;
   const getMasterArt = (product) => {
-    if (!product) return null;
-    if (!shopLoaded) return null;
-    // Alle Art.-Nrn. des Produkts durchsuchen
-    const arts = [product.art, ...(product.variants || []).map((v) => v.art)].filter(Boolean);
-    for (const art of arts) {
-      const entry = shopIndex[art.trim().toLowerCase()];
-      if (!entry) continue;
-      const masterEntry = entry.masterId ? masterIndex[entry.masterId] : null;
-      if (masterEntry) return masterEntry.model; // z.B. "pol-78015master"
-      if (!entry.masterId) return entry.model;   // Artikel ist selbst Master
-    }
-    return null;
+    if (!product || !product.isMaster) return null;
+    return product.art || null;
   };
 
   // open() nimmt optional die gescannte EAN mit
@@ -233,23 +167,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       .filter((p) => p.id !== masterProduct.id);
   }, [productByArt]);
 
-  // Sucht den Masterartikel für einen gescannten Art.-Nr.-Code über den Shop-Index.
-  // Gibt { product, variant } zurück — product = Master, variant = die gescannte Variante darin.
-  const findMasterViaShopIndex = (artKey) => {
-    if (!shopLoaded || !artKey) return null;
-    const entry = shopIndex[artKey.toLowerCase()];
-    if (!entry || !entry.masterId) return null;
-    // Master-Model aus masterIndex holen
-    const masterEntry = masterIndex[entry.masterId];
-    if (!masterEntry) return null;
-    const masterProduct = productByArt[masterEntry.model.toLowerCase()];
-    if (!masterProduct) return null;
-    // Die passende Variante im Masterprodukt finden (über Art.-Nr.)
-    const variant = (masterProduct.variants || []).find(
-      (vr) => vr.art && vr.art.trim().toLowerCase() === artKey.toLowerCase()
-    ) || null;
-    return { product: masterProduct, variant };
-  };
+  // Master-Lookup über Produktdaten (MASTER_MODEL aus Bestandssheet)
+  // shopIndex wird nicht mehr benötigt — alles kommt aus dem Bestandssheet.
+  const findMasterViaShopIndex = (_artKey) => null; // deprecated, slaveToMasterIndex wird genutzt
 
   const lookup = (code) => {
     const c = String(code).trim();
@@ -635,17 +555,11 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     // ── NEU: Master-Art.-Nr. und Shop-URL ──────────────────────
     const masterArt = getMasterArt(detail);
     const currentArt = scannedVariant && scannedVariant.art ? scannedVariant.art : detail.art;
-    const shopUrl = getShopUrl(currentArt);
 
-    // Für Slave: eigene Shop-URL (direkter Link auf den Slave-Artikel)
-    const getDirectShopUrl = (art) => {
-      if (!art || !shopLoaded) return null;
-      const key = String(art).trim().toLowerCase();
-      const entry = shopIndex[key];
-      if (!entry) return null;
-      return 'https://www.atlantis-onlineshop.de/' + entry.catNr + '/p-' + entry.id + '.html';
-    };
-    const slaveShopUrl = !isMasterDetail ? getDirectShopUrl(currentArt) : null;
+    // Shop-URLs direkt aus Produktdaten (Spalte ATLOS_URL)
+    // Slave: eigene shopUrl für den Button, masterProduct.shopUrl für den Master-Link
+    const shopUrl = !isMasterDetail && masterProduct ? getShopUrl(masterProduct) : getShopUrl(detail);
+    const slaveShopUrl = !isMasterDetail ? getShopUrl(detail) : null;
     const shopBtnUrl = slaveShopUrl || shopUrl;
 
     // ── Slave-Artikel: alle Artikel die zu diesem Master gehören ──
@@ -664,7 +578,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     // masterShopUrl: Link zum Masterartikel (für Slave-Ansicht)
     // shopUrl zeigt beim Slave auf den Slave, masterShopUrl auf den Master
     const masterProduct = !isMasterDetail ? slaveToMasterIndex[String(currentArt || '').trim().toLowerCase()] : null;
-    const masterShopUrl = masterProduct ? getShopUrl(masterProduct.art) : null;
+    const masterShopUrl = masterProduct ? getShopUrl(masterProduct) : null;
 
     // Slave-Accordion: alle Geschwister gruppiert nach Farbe/Gruppe (für Slave-Ansicht)
     // Wir bauen virtuelle variants aus slaveProducts für den VariantAccordion
@@ -880,10 +794,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               {!isMasterDetail && slaveShopUrl ? 'Artikel im Onlineshop anzeigen' : 'Im Onlineshop anzeigen'}
             </a>
           )}
-          {shopLoading && !shopBtnUrl && (
-            <div style={{ textAlign: 'center', fontSize: F(11), color: T.mute, marginBottom: T.gap }}>Shop-Daten werden geladen…</div>
-          )}
-          {shopLoaded && !shopBtnUrl && !shopLoading && (
+          {!shopBtnUrl && (
             <div style={{ textAlign: 'center', fontSize: F(11), color: T.mute, marginBottom: T.gap }}>Kein Onlineshop-Eintrag gefunden</div>
           )}
         </div>
