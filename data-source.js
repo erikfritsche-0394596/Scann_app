@@ -83,23 +83,16 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
   function mapRows(records) {
     const groups = {};
 
-    // Slaves kennen ihren Master über Spalte MASTER_MODEL (= Art.-Nr. des Masters).
-    // Master-Zeilen haben MASTER_SLAVE = "M", Slaves haben MASTER_SLAVE = "S" (oder leer).
-    // Wir gruppieren: alle Zeilen mit demselben MASTER_MODEL in eine Gruppe,
-    // Master-Zeilen unter ihrer eigenen ARTIKELNR.
     records.forEach((r) => {
       const isMaster = (r.MASTER_SLAVE || '').toUpperCase() === 'M';
       const masterModel = (r.MASTER_MODEL || '').trim();
       let key;
 
       if (isMaster) {
-        // Master → Gruppe unter eigener Art.-Nr.
         key = (r.ARTIKELNR || '').trim().toLowerCase();
       } else if (masterModel) {
-        // Slave mit MASTER_MODEL → in die Gruppe des Masters
         key = masterModel.toLowerCase();
       } else {
-        // Einzelartikel ohne Master → nach Name+Marke gruppieren (Fallback)
         const brand = cleanBrand(r.MARKE);
         key = (baseName(r.NAME || r.PRODUCTS_NAME || '') + '|' + brand).toLowerCase();
       }
@@ -127,9 +120,12 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       if (effectiveVarying) constants.forEach((k) => { const v = distinct(k)[0]; if (v) name += ` · ${v}`; });
 
       // Varianten bauen
+      // PREIS = aktueller Verkaufspreis, UVP = Listenpreis/Streichpreis
+      // Sale = wenn PREIS < UVP (Artikel ist günstiger als Listenpreis)
       const variants = isVariantProduct ? attrRows.map((x) => {
-        const vUvp = num(x.r.UVP); const vPrice = num(x.r.PREIS);
-        const vOnSale = vUvp > 0 && vPrice < vUvp - 0.001;
+        const vUvp   = num(x.r.UVP);
+        const vPrice = num(x.r.PREIS);
+        const vOnSale = vUvp > 0 && vPrice > 0 && vPrice < vUvp - 0.001;
         const vLabel = effectiveVarying
           ? effectiveVarying.map((k) => x.a[k]).filter(Boolean).join(' · ')
           : (baseName(nameOf(x.r)) !== baseName(nameOf(anchor))
@@ -143,9 +139,9 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
           ean:   x.r.EAN,
           art:   x.r.ARTIKELNR || '',
           image: resolveImg(x.r.BILD_URL || ''),
-          price: vOnSale ? vUvp : vPrice,
-          sale:  vOnSale ? vPrice : null,
-          // Shop-URL direkt aus Spalte Q (ATLOS_URL)
+          // price = Verkaufspreis (PREIS), sale = Streichpreis (UVP) nur wenn günstiger
+          price: vPrice,
+          sale:  vOnSale ? vUvp : null,
           shopUrl: (x.r.ATLOS_URL || '').trim() || null,
         };
       }) : [];
@@ -157,15 +153,17 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const stockTotal   = locations.reduce((a, l) => a + l.n, 0);
 
       // Preis des Anker-Artikels
+      // PREIS = Verkaufspreis, UVP = Listenpreis
+      // Sale = wenn PREIS < UVP
       const uvp    = num(anchor.UVP);
       const price  = num(anchor.PREIS);
-      const onSale = uvp > 0 && price < uvp - 0.001;
+      const onSale = uvp > 0 && price > 0 && price < uvp - 0.001;
 
       // Status
-      const statusVal    = (anchor.STATUS || anchor.Status || scannables[0]?.STATUS || scannables[0]?.Status || '').trim();
+      const statusVal     = (anchor.STATUS || anchor.Status || scannables[0]?.STATUS || scannables[0]?.Status || '').trim();
       const restpostenVal = (anchor.RESTPOSTEN || anchor.Restposten || scannables[0]?.RESTPOSTEN || scannables[0]?.Restposten || '').trim().toUpperCase();
-      const isInactive   = statusVal === '0';
-      const isRestposten = restpostenVal === 'JA';
+      const isInactive    = statusVal === '0';
+      const isRestposten  = restpostenVal === 'JA';
 
       // Art.-Nr. + EAN
       const art  = (master?.ARTIKELNR) || scannables[0]?.ARTIKELNR || anchor.ARTIKELNR || '';
@@ -176,8 +174,7 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const rawImg = anchor.BILD_URL || (scannables.find((s) => s.BILD_URL) || {}).BILD_URL || '';
       const image  = resolveImg(rawImg);
 
-      // Shop-URL: direkt aus Spalte Q (ATLOS_URL)
-      // Für Master: eigene ATLOS_URL, für Slave/Einzelartikel: ATLOS_URL des Anchors
+      // Shop-URL
       const shopUrl = (anchor.ATLOS_URL || '').trim() || null;
 
       // Master/Slave-Flags
@@ -193,8 +190,9 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
         brand,
         name,
         cat,
-        price:        onSale ? uvp : price,
-        sale:         onSale ? price : null,
+        // price = Verkaufspreis (PREIS), sale = Streichpreis (UVP) nur wenn günstiger
+        price:        price,
+        sale:         onSale ? uvp : null,
         stock:        totalsByLoc[HOME.key],
         stockTotal,
         home:         HOME.label,
@@ -209,7 +207,7 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
         inactive:     isInactive,
         restposten:   isRestposten,
         image,
-        shopUrl,      // ← direkt aus Spalte Q
+        shopUrl,
         isMaster:     isMasterProduct,
         slaveArts,
         _s: (name + ' ' + brand + ' ' + arts.join(' ') + ' ' + cat + ' ' + eans.join(' ')).toLowerCase(),
