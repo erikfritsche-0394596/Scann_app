@@ -60,6 +60,9 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
     return txt.trim() || 'Artikel';
   }
 
+  const resolveImg = (rawImg) =>
+    !rawImg ? '' : /^https?:/i.test(rawImg) ? rawImg : (window.IMAGE_BASE_URL ? window.IMAGE_BASE_URL + rawImg : '');
+
   function locsOf(r) {
     const o = {}; LOCATIONS.forEach((L) => { o[L.key] = Math.round(num(getCol(r, L.cols))); }); return o;
   }
@@ -92,14 +95,15 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       let name = baseName(nameOf(anchor));
       constants.forEach((k) => { const v = distinct(k)[0]; if (v) name += ` · ${v}`; });
 
-      // ── variants: now includes art (ARTIKELNR) per variant ──
+      // ── Varianten: mit Art.-Nr. UND variantenspezifischem Bild ──
       const variants = isVariantProduct ? attrRows.map((x) => ({
         v:     varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
         n:     x.loc[HOME.key],
         total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
         locs:  x.loc,
         ean:   x.r.EAN,
-        art:   x.r.ARTIKELNR || '',   // ← NEU: Art.-Nr. der Variante
+        art:   x.r.ARTIKELNR || '',
+        image: resolveImg(x.r.BILD_URL || ''),  // ← NEU: Bild pro Variante
       })) : [];
 
       const allLocRows = attrRows.map((x) => x.loc);
@@ -117,7 +121,7 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const art = (master && master.ARTIKELNR) ? master.ARTIKELNR : ((scannables[0] && scannables[0].ARTIKELNR) || anchor.ARTIKELNR || '');
       const arts = [...new Set([art, ...rows.map((r) => r.ARTIKELNR)].filter(Boolean))];
       const rawImg = anchor.BILD_URL || (scannables.find((s) => s.BILD_URL) || {}).BILD_URL || '';
-      const image = !rawImg ? '' : /^https?:/i.test(rawImg) ? rawImg : (window.IMAGE_BASE_URL ? window.IMAGE_BASE_URL + rawImg : '');
+      const image = resolveImg(rawImg);
       const eans = rows.map((r) => r.EAN).filter(Boolean);
 
       return {
@@ -136,7 +140,7 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
         home: HOME.label,
         locations,
         variantLabel: isVariantProduct ? (varying.length === 1 ? varying[0] : 'Ausführung') : null,
-        variants: variants.map(({ v, n, total, locs, ean, art }) => ({ v, n, total, locs, ean, art })),
+        variants: variants.map(({ v, n, total, locs, ean, art, image }) => ({ v, n, total, locs, ean, art, image })),
         specs: [
           ['Hersteller', anchor.MARKE || brand || '—'],
           ['Art.-Nr.',   art || '—'],
