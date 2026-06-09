@@ -1,7 +1,7 @@
-// Atlantis Sommerfest Scanner — final app (Direction C "Regal"), theme-aware.
-// Tab bar (Scannen / Suche / Verlauf) + data-dense detail with KPI tiles,
-// stock meter, per-variant dropdown and spec table. Driven by Tweaks.
-// NEW: Standortauswahl + Farbthema, Master-Artikelnummer, Onlineshop-Link
+// Atlantis Scanner — Direction C "Regal", theme-aware.
+// Tab bar (Scannen / Suche / Verlauf) + data-dense detail.
+// Jedes Produkt-Objekt ist eine einzelne Sheet-Zeile (kein Gruppieren mehr).
+// Geschwister-Artikel werden live über masterArt / slaveArts nachgeschlagen.
 /* global React, ATLANTIS, AUI */
 
 const ACCENTS = {
@@ -10,20 +10,16 @@ const ACCENTS = {
   koralle: { light: '#b4533a', dark: '#f08c6f', label: 'Koralle' },
 };
 
-// ── Standorte mit je eigenem Farbthema ──────────────────────────────────────
-// Standorte — keys exakt wie in data-source.js LOCATIONS definiert
 const STANDORTE = [
-  { key: 'coppi',     label: 'Coppi',        shortLabel: 'Coppi',        accent: '#1a3c6e', accentDark: '#6ea4ea', emoji: '🔵' },
-  { key: 'zentral',   label: 'Zentrallager', shortLabel: 'Zentrallager', accent: '#374151', accentDark: '#9ca3af', emoji: '⚫' },
-  { key: 'steglitz',  label: 'Steglitz',     shortLabel: 'Steglitz',     accent: '#166534', accentDark: '#4ade80', emoji: '🟢' },
-  { key: 'freiburg',  label: 'Freiburg',     shortLabel: 'Freiburg',     accent: '#7c2d12', accentDark: '#fb923c', emoji: '🟠' },
-  { key: 'hamburg',   label: 'Hamburg',      shortLabel: 'Hamburg',      accent: '#581c87', accentDark: '#c084fc', emoji: '🟣' },
+  { key: 'coppi',    label: 'Coppi',        shortLabel: 'Coppi',        accent: '#1a3c6e', accentDark: '#6ea4ea', emoji: '🔵' },
+  { key: 'zentral',  label: 'Zentrallager', shortLabel: 'Zentrallager', accent: '#374151', accentDark: '#9ca3af', emoji: '⚫' },
+  { key: 'steglitz', label: 'Steglitz',     shortLabel: 'Steglitz',     accent: '#166534', accentDark: '#4ade80', emoji: '🟢' },
+  { key: 'freiburg', label: 'Freiburg',     shortLabel: 'Freiburg',     accent: '#7c2d12', accentDark: '#fb923c', emoji: '🟠' },
+  { key: 'hamburg',  label: 'Hamburg',      shortLabel: 'Hamburg',      accent: '#581c87', accentDark: '#c084fc', emoji: '🟣' },
 ];
 
-// Alle Standort-Keys in der gewünschten Anzeigereihenfolge
 const ALL_LOC_KEYS = STANDORTE.map((s) => s.key);
 
-// Google Sheets CSV-URL (öffentlich lesbar)
 function tokens({ accent: accentLight, dark = false, density = 'komfortabel', big = false }) {
   const acc = Object.values(ACCENTS).find((a) => a.light === accentLight) || ACCENTS.navy;
   const accent = dark ? acc.dark : acc.light;
@@ -32,24 +28,18 @@ function tokens({ accent: accentLight, dark = false, density = 'komfortabel', bi
   return {
     accent,
     accentSoft: dark ? `${acc.dark}26` : `${acc.light}14`,
-    red: dark ? '#ff6274' : '#c8102e',
-    bg: dark ? '#0b1726' : '#eef2f7',
-    card: dark ? '#13243a' : '#ffffff',
+    red:      dark ? '#ff6274' : '#c8102e',
+    bg:       dark ? '#0b1726' : '#eef2f7',
+    card:     dark ? '#13243a' : '#ffffff',
     headerBg: dark ? 'rgba(11,23,38,0.86)' : 'rgba(255,255,255,0.92)',
-    ink: dark ? '#f3f7fb' : '#1b2733',
-    mute: dark ? 'rgba(231,239,247,0.58)' : '#64748b',
-    border: dark ? 'rgba(255,255,255,0.09)' : 'rgba(26,60,110,0.09)',
-    field: dark ? 'rgba(255,255,255,0.06)' : '#fff',
+    ink:      dark ? '#f3f7fb' : '#1b2733',
+    mute:     dark ? 'rgba(231,239,247,0.58)' : '#64748b',
+    border:   dark ? 'rgba(255,255,255,0.09)' : 'rgba(26,60,110,0.09)',
+    field:    dark ? 'rgba(255,255,255,0.06)' : '#fff',
     tileShadow: dark ? 'none' : '0 1px 2px rgba(26,60,110,0.06)',
     stock: { ok: dark ? '#37d27e' : '#1f8a4c', low: dark ? '#ffc44d' : '#bb7d00', out: dark ? '#ff6274' : '#c8102e' },
-    chipOut: dark ? 'rgba(255,255,255,0.04)' : '#f4f6f9',
     chipLow: dark ? 'rgba(255,196,77,0.12)' : '#fff7ec',
-    chipOk:  dark ? 'rgba(110,164,234,0.12)' : '#f0f6ff',
-    pad: D ? 11 : 16,
-    gap: D ? 8 : 12,
-    radius: D ? 12 : 14,
-    fs,
-    dark,
+    pad: D ? 11 : 16, gap: D ? 8 : 12, radius: D ? 12 : 14, fs, dark,
   };
 }
 
@@ -60,139 +50,97 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const { ProductPhoto, Icon } = AUI;
   const T = tokens(tw);
   const screen = fit === 'screen';
-  const padTopHdr = screen ? 'calc(env(safe-area-inset-top, 12px) + 16px)' : 56;
-  const padTopDet = screen ? 'calc(env(safe-area-inset-top, 12px) + 14px)' : 54;
+  const padTopHdr  = screen ? 'calc(env(safe-area-inset-top, 12px) + 16px)' : 56;
+  const padTopDet  = screen ? 'calc(env(safe-area-inset-top, 12px) + 14px)' : 54;
   const padBotTabs = screen ? 'calc(env(safe-area-inset-bottom, 10px) + 12px)' : 22;
-  const padBotBtn = screen ? 'calc(env(safe-area-inset-bottom, 10px) + 14px)' : 30;
+  const padBotBtn  = screen ? 'calc(env(safe-area-inset-bottom, 10px) + 14px)' : 30;
 
-  const [tab, setTab] = useState('scan');
+  const [tab, setTab]   = useState('scan');
   const [detail, setDetail] = useState(null);
   const [history, setHistory] = useState([]);
   const [q, setQ] = useState('');
-
-  // ── NEU: Standort-State ──────────────────────────────────────────────────
   const [standort, setStandort] = useState(STANDORTE[0]);
   const [showStandortPicker, setShowStandortPicker] = useState(false);
 
-  // Dynamisches Accent basierend auf Standort
   const standortAccent = T.dark ? standort.accentDark : standort.accent;
 
-  // ── Standort-abhängiger Bestand ──────────────────────────────────────────
-  const getStock = (locs) => locs ? (locs[standort.key] ?? 0) : 0;
-  const getTotalStock = (locs) => locs
-    ? ALL_LOC_KEYS.reduce((s, k) => s + (locs[k] ?? 0), 0)
-    : 0;
-  const getProductStock = (p) => {
-    if (p.locs) return getStock(p.locs);
-    if (p.variants && p.variants.length > 0)
-      return p.variants.reduce((s, vr) => s + (vr.locs ? (vr.locs[standort.key] ?? 0) : 0), 0);
-    return p.stock ?? 0;
-  };
-  const getProductTotalStock = (p) => {
-    if (p.locs) return getTotalStock(p.locs);
-    if (p.variants && p.variants.length > 0)
-      return p.variants.reduce((s, vr) => s + (vr.locs ? ALL_LOC_KEYS.reduce((a, k) => a + (vr.locs[k] ?? 0), 0) : 0), 0);
-    return p.stockTotal ?? p.stock ?? 0;
-  };
+  // ── Bestandshelfer ────────────────────────────────────────────
+  const getStock      = (p) => p.locs ? (p.locs[standort.key] ?? 0) : (p.stock ?? 0);
+  const getTotalStock = (p) => p.locs
+    ? ALL_LOC_KEYS.reduce((s, k) => s + (p.locs[k] ?? 0), 0)
+    : (p.stockTotal ?? p.stock ?? 0);
 
-  const getShopUrl = (product) => (product && product.shopUrl) || null;
-  const getMasterArt = (product) => {
-    if (!product || !product.isMaster) return null;
-    return product.art || null;
-  };
-
-  // open() nimmt optional die gescannte EAN mit
-  const open = (p, scannedEan = null) => {
-    setDetail({ ...p, _scannedEan: scannedEan });
-    setHistory((h) => [{ p, at: Date.now() }, ...h.filter((x) => x.p.ean !== p.ean)].slice(0, 20));
-  };
-
-  // ── real barcode scanning (html5-qrcode) + EAN/Art.-Nr. lookup ──
-  const CAM = typeof Html5Qrcode !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices;
-
+  // ── Produkt-Indizes ───────────────────────────────────────────
+  // EAN / Art.-Nr. → Produkt
   const codeIndex = useMemo(() => {
     const ei = {}, ai = {};
     (PRODUCTS || []).forEach((p) => {
-      (p.allEans && p.allEans.length ? p.allEans : [p.ean]).forEach((e) => {
-        if (e) ei[String(e).trim()] = { product: p, variant: null };
-      });
-      (p.allArts || [p.art]).forEach((a) => {
-        if (a) ai[String(a).trim().toLowerCase()] = { product: p, variant: null };
-      });
-      (p.variants || []).forEach((vr) => {
-        if (vr.ean) ei[String(vr.ean).trim()] = { product: p, variant: vr };
-        if (vr.art) ai[String(vr.art).trim().toLowerCase()] = { product: p, variant: vr };
-      });
+      if (p.ean) ei[String(p.ean).trim()] = p;
+      (p.allEans || []).forEach((e) => { if (e) ei[String(e).trim()] = p; });
+      if (p.art) ai[String(p.art).trim().toLowerCase()] = p;
+      (p.allArts || []).forEach((a) => { if (a) ai[String(a).trim().toLowerCase()] = p; });
     });
     return { ei, ai };
   }, [PRODUCTS]);
 
+  // Art.-Nr. → Produkt (für Geschwister-Lookup)
   const productByArt = useMemo(() => {
     const m = {};
     (PRODUCTS || []).forEach((p) => {
-      (p.allArts || [p.art]).filter(Boolean).forEach((a) => {
-        m[String(a).trim().toLowerCase()] = p;
-      });
+      if (p.art) m[String(p.art).trim().toLowerCase()] = p;
     });
     return m;
   }, [PRODUCTS]);
 
-  const slaveToMasterIndex = useMemo(() => {
+  // SlaveArt → Master-Produkt
+  const slaveToMaster = useMemo(() => {
     const m = {};
     (PRODUCTS || []).forEach((p) => {
       if (!p.isMaster) return;
-      (p.slaveArts || []).forEach((sa) => {
-        if (sa) m[String(sa).trim().toLowerCase()] = p;
-      });
+      (p.slaveArts || []).forEach((a) => { if (a) m[String(a).trim().toLowerCase()] = p; });
     });
     return m;
   }, [PRODUCTS]);
 
-  const getSlavesForMaster = useCallback((masterProduct) => {
+  // Alle Slaves eines Masters
+  const getSiblings = useCallback((masterProduct) => {
     if (!masterProduct || !masterProduct.isMaster) return [];
-    const slaveArts = (masterProduct.slaveArts || []).map((a) => String(a).trim().toLowerCase());
-    return slaveArts
-      .map((a) => productByArt[a])
-      .filter(Boolean)
-      .filter((p) => p.id !== masterProduct.id);
+    return (masterProduct.slaveArts || [])
+      .map((a) => productByArt[String(a).trim().toLowerCase()])
+      .filter(Boolean);
   }, [productByArt]);
 
   const lookup = (code) => {
     const c = String(code).trim();
-    const byEan = codeIndex.ei[c];
-    if (byEan) return { ...byEan, isEan: true, code: c };
-    const byArt = codeIndex.ai[c.toLowerCase()];
-    if (byArt) return { ...byArt, isEan: false, code: c };
-    return null;
+    return codeIndex.ei[c] || codeIndex.ai[c.toLowerCase()] || null;
   };
 
+  // ── Kamera ────────────────────────────────────────────────────
+  const CAM = typeof Html5Qrcode !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices;
   const camRef = useRef(null);
-  const [cam, setCam] = useState('idle');
+  const [cam, setCam]     = useState('idle');
   const [camMsg, setCamMsg] = useState('');
   const [notFound, setNotFound] = useState(null);
-  const [manual, setManual] = useState('');
+  const [manual, setManual]   = useState('');
   const nfTimer = useRef(0);
 
+  const open = (p, scannedEan = null) => {
+    setDetail({ ...p, _scannedEan: scannedEan || p.ean });
+    setHistory((h) => [{ p, at: Date.now() }, ...h.filter((x) => x.p.ean !== p.ean)].slice(0, 20));
+  };
+
   const stopCamera = useCallback(() => {
-    const inst = camRef.current;
-    camRef.current = null;
+    const inst = camRef.current; camRef.current = null;
     if (inst) { try { inst.stop().then(() => inst.clear()).catch(() => {}); } catch (e) {} }
     setCam((c) => (c === 'live' ? 'idle' : c));
   }, []);
 
   const handleCode = (code) => {
-    const result = lookup(code);
-    if (result) {
-      setNotFound(null);
-      stopCamera();
-
-      const scannedEan = result.isEan
-        ? result.code
-        : (result.variant && result.variant.ean ? String(result.variant.ean).trim() : null);
-
-      // Slave oder Master oder Einzelartikel → immer direkt öffnen.
-      // Der zugehörige Master wird in der Detailansicht als Link angezeigt.
-      open(result.product, scannedEan);
+    const product = lookup(code);
+    if (product) {
+      setNotFound(null); stopCamera();
+      const scannedEan = /^\d{8,14}$/.test(String(code).trim()) ? String(code).trim() : product.ean;
+      open(product, scannedEan);
     } else {
       setNotFound(String(code).trim());
       clearTimeout(nfTimer.current);
@@ -204,7 +152,12 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     if (!CAM || camRef.current) return;
     setNotFound(null); setCamMsg(''); setCam('live');
     const F2 = (typeof Html5QrcodeSupportedFormats !== 'undefined')
-      ? [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.CODE_93, Html5QrcodeSupportedFormats.ITF, Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.DATA_MATRIX, Html5QrcodeSupportedFormats.QR_CODE]
+      ? [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+         Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+         Html5QrcodeSupportedFormats.CODE_93, Html5QrcodeSupportedFormats.ITF,
+         Html5QrcodeSupportedFormats.CODABAR, Html5QrcodeSupportedFormats.DATA_MATRIX,
+         Html5QrcodeSupportedFormats.QR_CODE]
       : undefined;
     let inst;
     try { inst = new Html5Qrcode('scanner-cam', { formatsToSupport: F2, verbose: false }); }
@@ -212,19 +165,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     camRef.current = inst;
     inst.start(
       { facingMode: 'environment' },
-      {
-        fps: 15,
-        qrbox: { width: 250, height: 120 },
-        aspectRatio: 1.7778,
-        videoConstraints: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          focusMode: 'continuous',
-        },
-      },
-      (text) => handleCode(text),
-      () => {}
+      { fps: 15, qrbox: { width: 250, height: 120 }, aspectRatio: 1.7778,
+        videoConstraints: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, focusMode: 'continuous' } },
+      (text) => handleCode(text), () => {}
     ).catch((e) => {
       camRef.current = null; setCam('error');
       setCamMsg(/permission|denied|notallowed|notfounderror/i.test(String(e))
@@ -238,42 +181,27 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   const F = (px) => Math.round(px * T.fs);
 
-  // ── NEU: Standort-Picker Modal ───────────────────────────────────────────
+  // ── Standort-Picker ───────────────────────────────────────────
   const StandortPicker = () => (
-    <div
-      onClick={() => setShowStandortPicker(false)}
-      style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 16px', paddingBottom: screen ? 'calc(env(safe-area-inset-bottom,16px) + 16px)' : 28, boxShadow: '0 -4px 32px rgba(0,0,0,0.18)' }}
-      >
+    <div onClick={() => setShowStandortPicker(false)}
+      style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 16px',
+          paddingBottom: screen ? 'calc(env(safe-area-inset-bottom,16px) + 16px)' : 28, boxShadow: '0 -4px 32px rgba(0,0,0,0.18)' }}>
         <div style={{ width: 40, height: 4, borderRadius: 4, background: T.border, margin: '0 auto 18px' }} />
         <div style={{ fontSize: F(17), fontWeight: 800, color: T.ink, marginBottom: 16 }}>Standort auswählen</div>
         {STANDORTE.map((s) => {
           const isActive = s.key === standort.key;
           const color = T.dark ? s.accentDark : s.accent;
           return (
-            <button
-              key={s.key}
-              onClick={() => { setStandort(s); setShowStandortPicker(false); }}
-              style={{
-                width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-                fontFamily: 'inherit', background: isActive ? `${color}14` : 'transparent',
-                borderRadius: 12, padding: '12px 14px', marginBottom: 4,
-                display: 'flex', alignItems: 'center', gap: 12,
-                outline: isActive ? `2px solid ${color}` : 'none',
-              }}
-            >
+            <button key={s.key} onClick={() => { setStandort(s); setShowStandortPicker(false); }}
+              style={{ width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                background: isActive ? `${color}14` : 'transparent', borderRadius: 12, padding: '12px 14px',
+                marginBottom: 4, display: 'flex', alignItems: 'center', gap: 12,
+                outline: isActive ? `2px solid ${color}` : 'none' }}>
               <div style={{ width: 14, height: 14, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 0 3px ${color}28` }} />
-              <span style={{ fontSize: F(15), fontWeight: isActive ? 700 : 500, color: isActive ? color : T.ink }}>
-                {s.label}
-              </span>
-              {isActive && (
-                <span style={{ marginLeft: 'auto', fontSize: F(12), fontWeight: 700, color, background: `${color}18`, padding: '2px 9px', borderRadius: 20 }}>
-                  aktiv
-                </span>
-              )}
+              <span style={{ fontSize: F(15), fontWeight: isActive ? 700 : 500, color: isActive ? color : T.ink }}>{s.label}</span>
+              {isActive && <span style={{ marginLeft: 'auto', fontSize: F(12), fontWeight: 700, color, background: `${color}18`, padding: '2px 9px', borderRadius: 20 }}>aktiv</span>}
             </button>
           );
         })}
@@ -281,22 +209,14 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     </div>
   );
 
-  // ── shared atoms ─────────────────────────────────────────────
+  // ── Shared UI ─────────────────────────────────────────────────
   const StandortBadge = () => (
-    <button
-      onClick={() => setShowStandortPicker(true)}
-      style={{
-        flexShrink: 0, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-        background: `${standortAccent}18`,
-        borderRadius: 20, padding: '5px 12px 5px 10px',
-        display: 'flex', alignItems: 'center', gap: 7,
-        outline: `1.5px solid ${standortAccent}44`,
-      }}
-    >
+    <button onClick={() => setShowStandortPicker(true)}
+      style={{ flexShrink: 0, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: `${standortAccent}18`,
+        borderRadius: 20, padding: '5px 12px 5px 10px', display: 'flex', alignItems: 'center', gap: 7,
+        outline: `1.5px solid ${standortAccent}44` }}>
       <div style={{ width: 10, height: 10, borderRadius: '50%', background: standortAccent, flexShrink: 0 }} />
-      <span style={{ fontSize: F(12), fontWeight: 700, color: standortAccent, whiteSpace: 'nowrap' }}>
-        {standort.shortLabel}
-      </span>
+      <span style={{ fontSize: F(12), fontWeight: 700, color: standortAccent, whiteSpace: 'nowrap' }}>{standort.shortLabel}</span>
       <svg width={10} height={10} viewBox="0 0 24 24" fill="none" style={{ opacity: 0.6 }}>
         <path d="M6 9l6 6 6-6" stroke={standortAccent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
@@ -304,35 +224,40 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   );
 
   const Header = ({ title, sub, right }) => (
-    <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', paddingTop: padTopHdr, paddingLeft: T.pad + 4, paddingRight: T.pad + 4, paddingBottom: 13, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-end', gap: 12, flexShrink: 0 }}>
+    <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+      paddingTop: padTopHdr, paddingLeft: T.pad + 4, paddingRight: T.pad + 4, paddingBottom: 13,
+      borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'flex-end', gap: 12, flexShrink: 0 }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: F(26), fontWeight: 800, color: T.ink, letterSpacing: -0.3, lineHeight: 1.1 }}>{title}</div>
         {sub && <div style={{ fontSize: F(13), color: T.mute, marginTop: 3 }}>{sub}</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 2 }}>
-        {right}
-        <StandortBadge />
+        {right}<StandortBadge />
       </div>
     </div>
   );
 
-  const StockDot = ({ st, size = 8 }) => <span style={{ width: size, height: size, borderRadius: size, background: T.stock[st], flexShrink: 0, display: 'inline-block' }} />;
+  const StockDot = ({ st, size = 8 }) =>
+    <span style={{ width: size, height: size, borderRadius: size, background: T.stock[st], flexShrink: 0, display: 'inline-block' }} />;
 
   const ListRow = ({ p, time }) => {
-    const pStockCur = getProductStock(p);
-    const st = stockState(pStockCur);
-    const sale = p.sale != null && p.sale > p.price;
+    const stock = getStock(p);
+    const st    = stockState(stock);
+    const onSale = p.sale != null && p.sale > p.price;
+    if (p.isMaster) return null; // Master-Zeilen nicht in Listen anzeigen
     return (
-      <button onClick={() => open(p)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: T.card, border: `1px solid ${T.border}`, borderRadius: T.radius, padding: T.pad - 2, display: 'flex', gap: 12, alignItems: 'center', boxShadow: T.tileShadow, fontFamily: 'inherit' }}>
+      <button onClick={() => open(p)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: T.card,
+        border: `1px solid ${T.border}`, borderRadius: T.radius, padding: T.pad - 2, display: 'flex', gap: 12,
+        alignItems: 'center', boxShadow: T.tileShadow, fontFamily: 'inherit' }}>
         <ProductPhoto product={p} dark={T.dark} radius={10} style={{ width: F(52), height: F(52), flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.brand}{time ? ` · ${time}` : ''}</div>
           <div style={{ fontSize: F(14), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: F(14), fontWeight: 800, color: sale ? T.red : standortAccent }}>{EUR(p.price)}</span>
+            <span style={{ fontSize: F(14), fontWeight: 800, color: onSale ? T.red : standortAccent }}>{EUR(p.price)}</span>
             <StockDot st={st} size={7} />
-            <span style={{ fontSize: F(12), color: T.mute }}>{pStockCur} Stk</span>
-            {p.inactive && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
+            <span style={{ fontSize: F(12), color: T.mute }}>{stock} Stk</span>
+            {p.inactive   && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
             {p.restposten && <span style={{ fontSize: F(10), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '1px 5px', borderRadius: 4 }}>Restposten</span>}
           </div>
         </div>
@@ -341,130 +266,15 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     );
   };
 
-  // ── VariantAccordion ─────────────────────────────────────────
-  function VariantAccordion({ detail, T, F, stockState }) {
-    if (!detail.variants || detail.variants.length === 0) return null;
-
-    const scannedEan = detail._scannedEan || null;
-    const LOCS = detail.locations || [];
-
-    const scannedVariant = scannedEan
-      ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === scannedEan)
-      : null;
-
-    const buildGroups = () => {
-      const groups = {};
-      detail.variants.forEach((vr) => {
-        const parts = vr.v ? vr.v.split(' · ') : [vr.v];
-        const groupKey = parts.length > 1 ? parts[0] : 'Alle';
-        const sizeKey  = parts.length > 1 ? parts.slice(1).join(' · ') : parts[0];
-        if (!groups[groupKey]) groups[groupKey] = [];
-        groups[groupKey].push({ ...vr, _groupKey: groupKey, _sizeKey: sizeKey });
-      });
-      return groups;
-    };
-
-    const groups = buildGroups();
-    const groupKeys = Object.keys(groups);
-    const multiGroup = groupKeys.length > 1;
-
-    const scannedGroup = scannedVariant
-      ? (scannedVariant.v ? scannedVariant.v.split(' · ')[0] : groupKeys[0])
-      : null;
-
-    const [openGroups, setOpenGroups] = React.useState(() => {
-      const init = {};
-      if (scannedGroup) init[scannedGroup] = true;
-      else if (groupKeys.length === 1) init[groupKeys[0]] = true;
-      return init;
-    });
-    const [openSizes, setOpenSizes] = React.useState(() => {
-      if (scannedEan) return { [scannedEan]: true };
-      return {};
-    });
-
-    const toggleGroup = (key) => setOpenGroups((o) => ({ ...o, [key]: !o[key] }));
-    const toggleSize = (ean) => setOpenSizes((o) => ({ ...o, [ean]: !o[ean] }));
-
+  // ── Geschwister-Accordion ─────────────────────────────────────
+  // Zeigt alle Slaves desselben Masters als aufklappbare Liste
+  function SiblingsAccordion({ siblings, currentEan, T, F }) {
+    if (!siblings || siblings.length === 0) return null;
     const stockColor = (n) => n <= 0 ? T.stock.out : n <= 2 ? T.stock.low : T.stock.ok;
-
-    const LocBars = ({ vr }) => {
-      if (!vr.locs || Object.keys(vr.locs).length === 0) return null;
-      const locMax = Math.max(1, ...ALL_LOC_KEYS.map((k) => vr.locs[k] ?? 0));
-      return (
-        <div style={{ background: T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc', borderTop: `1px solid ${T.border}`, padding: `${F(7)}px ${F(14)}px ${F(7)}px ${F(28)}px` }}>
-          {ALL_LOC_KEYS.map((locKey) => {
-            const sd = STANDORTE.find((s) => s.key === locKey) || { key: locKey, label: locKey };
-            const loc = { key: locKey, label: sd.label, home: locKey === standort.key };
-            const n = vr.locs[locKey] ?? 0;
-            const pct = Math.round((n / locMax) * 100);
-            return (
-              <div key={loc.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ width: F(74), flexShrink: 0, fontSize: F(11), fontWeight: loc.home ? 700 : 400, color: loc.home ? standortAccent : T.mute }}>
-                  {loc.label}
-                  {loc.home && <span style={{ marginLeft: 4, fontSize: F(8), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>hier</span>}
-                </span>
-                <div style={{ flex: 1, height: 5, borderRadius: 5, background: T.dark ? 'rgba(255,255,255,0.08)' : '#dde4ee', overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: n === 0 ? 'transparent' : loc.home ? standortAccent : (T.dark ? 'rgba(231,239,247,0.35)' : '#9fb0c6') }} />
-                </div>
-                <span style={{ width: F(22), textAlign: 'right', fontSize: F(12), fontWeight: 700, color: n ? T.ink : T.mute }}>{n}</span>
-              </div>
-            );
-          })}
-        </div>
-      );
-    };
-
-    const SizeRow = ({ vr }) => {
-      const isScannedRow = scannedEan && vr.ean && String(vr.ean).trim() === scannedEan;
-      const isOpen = openSizes[vr.ean];
-      const cop = vr.locs ? (vr.locs[standort.key] ?? 0) : vr.n;
-      const tot = vr.locs ? ALL_LOC_KEYS.reduce((s,k) => s+(vr.locs[k]??0),0) : (vr.total || cop);
-      const hasLocs = vr.locs && Object.keys(vr.locs).length > 0;
-      return (
-        <div>
-          <button onClick={() => hasLocs && toggleSize(vr.ean)} style={{ width: '100%', textAlign: 'left', border: 'none', cursor: hasLocs ? 'pointer' : 'default', fontFamily: 'inherit', padding: `${F(9)}px ${F(14)}px`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: isScannedRow ? (T.dark ? `${standortAccent}1a` : `${standortAccent}0d`) : 'transparent', borderLeft: isScannedRow ? `3px solid ${standortAccent}` : '3px solid transparent', borderTop: `1px solid ${T.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-              {isScannedRow && <span style={{ fontSize: F(9), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, border: `1px solid ${standortAccent}44`, padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4, flexShrink: 0 }}>gescannt</span>}
-              <span style={{ fontSize: F(13), fontWeight: isScannedRow ? 700 : 500, color: T.ink }}>{vr._sizeKey}</span>
-              {vr.art && <span style={{ fontSize: F(10), color: T.mute, fontFamily: 'ui-monospace, Menlo, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{vr.art}</span>}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              {vr.price > 0 && (
-                <span style={{ fontSize: F(12), fontWeight: 700, color: (vr.sale != null && vr.sale > vr.price) ? T.red : standortAccent, whiteSpace: 'nowrap' }}>
-                  {EUR(vr.price)}
-                </span>
-              )}
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: F(14), fontWeight: 700, color: stockColor(cop), lineHeight: 1 }}>{cop} <span style={{ fontSize: F(10), fontWeight: 500, color: T.mute }}>{standort.shortLabel}</span></div>
-                {tot !== cop && <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>{tot} gesamt</div>}
-              </div>
-              {hasLocs && <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.18s ease', opacity: 0.5 }}><path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-            </div>
-          </button>
-          {isOpen && hasLocs && <LocBars vr={vr} />}
-        </div>
-      );
-    };
-
-    const GroupHeader = ({ groupKey, items }) => {
-      const isScannedGrp = groupKey === scannedGroup;
-      const isOpen = openGroups[groupKey];
-      const coppiSum = items.reduce((a, vr) => a + (vr.locs ? (vr.locs[standort.key] ?? 0) : vr.n), 0);
-      const totSum = items.reduce((a, vr) => a + (vr.locs ? ALL_LOC_KEYS.reduce((s,k) => s+(vr.locs[k]??0),0) : (vr.total || vr.n)), 0);
-      return (
-        <button onClick={() => toggleGroup(groupKey)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', border: 'none', padding: `${F(10)}px ${F(14)}px`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: isScannedGrp ? (T.dark ? `${standortAccent}1a` : `${standortAccent}0f`) : (T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc'), borderTop: `1px solid ${T.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {isScannedGrp && <svg width={13} height={13} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3M3 12h18" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" /></svg>}
-            <span style={{ fontSize: F(13), fontWeight: 700, color: isScannedGrp ? standortAccent : T.ink }}>{groupKey}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: F(11), color: T.mute }}><span style={{ color: stockColor(coppiSum), fontWeight: 700 }}>{coppiSum}</span> vor Ort · {totSum} ges.</span>
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.18s ease', opacity: 0.5 }}><path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          </div>
-        </button>
-      );
-    };
+    const [openEans, setOpenEans] = React.useState(() =>
+      currentEan ? { [currentEan]: true } : {}
+    );
+    const toggle = (ean) => setOpenEans((o) => ({ ...o, [ean]: !o[ean] }));
 
     return (
       <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, overflow: 'hidden' }}>
@@ -472,115 +282,108 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" stroke={T.mute} strokeWidth="2" strokeLinejoin="round"/><path d="M3 7l9 4 9-4M12 11v10" stroke={T.mute} strokeWidth="2" strokeLinejoin="round"/></svg>
           Alle Ausführungen
         </div>
-        {!multiGroup && groups[groupKeys[0]].map((vr) => <SizeRow key={vr.ean || vr.v} vr={vr} />)}
-        {multiGroup && groupKeys.map((gk) => (
-          <div key={gk}>
-            <GroupHeader groupKey={gk} items={groups[gk]} />
-            {openGroups[gk] && groups[gk].map((vr) => <SizeRow key={vr.ean || vr.v} vr={vr} />)}
-          </div>
-        ))}
+        {siblings.map((sp) => {
+          const isCurrent = sp.ean === currentEan;
+          const stock     = sp.locs ? (sp.locs[standort.key] ?? 0) : (sp.stock ?? 0);
+          const total     = sp.locs ? ALL_LOC_KEYS.reduce((s, k) => s + (sp.locs[k] ?? 0), 0) : (sp.stockTotal ?? 0);
+          const isOpen    = openEans[sp.ean];
+          const hasLocs   = sp.locs && ALL_LOC_KEYS.some((k) => (sp.locs[k] ?? 0) > 0 || sp.locs[k] !== undefined);
+          const onSale    = sp.sale != null && sp.sale > sp.price;
+          const locMax    = hasLocs ? Math.max(1, ...ALL_LOC_KEYS.map((k) => sp.locs[k] ?? 0)) : 1;
+
+          return (
+            <div key={sp.ean || sp.art}>
+              <button onClick={() => hasLocs && toggle(sp.ean)}
+                style={{ width: '100%', textAlign: 'left', border: 'none', fontFamily: 'inherit',
+                  cursor: hasLocs ? 'pointer' : 'default', padding: `${F(9)}px ${F(14)}px`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                  background: isCurrent ? (T.dark ? `${standortAccent}1a` : `${standortAccent}0d`) : 'transparent',
+                  borderLeft: isCurrent ? `3px solid ${standortAccent}` : '3px solid transparent',
+                  borderTop: `1px solid ${T.border}` }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {isCurrent && <span style={{ fontSize: F(9), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, border: `1px solid ${standortAccent}44`, padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4, marginRight: 6 }}>gescannt</span>}
+                  <span style={{ fontSize: F(13), fontWeight: isCurrent ? 700 : 500, color: T.ink }}>{sp.name}</span>
+                  {sp.art && <span style={{ display: 'block', fontSize: F(10), color: T.mute, fontFamily: 'ui-monospace, Menlo, monospace', marginTop: 1 }}>{sp.art}</span>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  {sp.price > 0 && <span style={{ fontSize: F(12), fontWeight: 700, color: onSale ? T.red : standortAccent, whiteSpace: 'nowrap' }}>{EUR(sp.price)}</span>}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: F(14), fontWeight: 700, color: stockColor(stock), lineHeight: 1 }}>{stock} <span style={{ fontSize: F(10), fontWeight: 500, color: T.mute }}>{standort.shortLabel}</span></div>
+                    {total !== stock && <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>{total} ges.</div>}
+                  </div>
+                  {hasLocs && <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', opacity: 0.5 }}><path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+              </button>
+              {isOpen && hasLocs && (
+                <div style={{ background: T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc', borderTop: `1px solid ${T.border}`, padding: `${F(7)}px ${F(14)}px ${F(7)}px ${F(28)}px` }}>
+                  {ALL_LOC_KEYS.map((locKey) => {
+                    const sd  = STANDORTE.find((s) => s.key === locKey) || { key: locKey, label: locKey };
+                    const n   = sp.locs[locKey] ?? 0;
+                    const pct = Math.round((n / locMax) * 100);
+                    const home = locKey === standort.key;
+                    return (
+                      <div key={locKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                        <span style={{ width: F(74), flexShrink: 0, fontSize: F(11), fontWeight: home ? 700 : 400, color: home ? standortAccent : T.mute }}>
+                          {sd.label}
+                          {home && <span style={{ marginLeft: 4, fontSize: F(8), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>hier</span>}
+                        </span>
+                        <div style={{ flex: 1, height: 5, borderRadius: 5, background: T.dark ? 'rgba(255,255,255,0.08)' : '#dde4ee', overflow: 'hidden' }}>
+                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: n === 0 ? 'transparent' : home ? standortAccent : (T.dark ? 'rgba(231,239,247,0.35)' : '#9fb0c6') }} />
+                        </div>
+                        <span style={{ width: F(22), textAlign: 'right', fontSize: F(12), fontWeight: 700, color: n ? T.ink : T.mute }}>{n}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   }
 
-  // ── detail ───────────────────────────────────────────────────
+  // ── Detailansicht ─────────────────────────────────────────────
   const detailScreen = detail && (() => {
-    // price = Verkaufspreis (PREIS), sale = Streichpreis (UVP) — nur gesetzt wenn günstiger
-    const sale = detail.sale != null && detail.sale > detail.price;
-    const save = sale ? Math.round((1 - detail.price / detail.sale) * 100) : 0;
-    const Tile = ({ children }) => <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>{children}</div>;
+    const Tile      = ({ children }) => <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>{children}</div>;
     const TileLabel = ({ icon, children }) => <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5 }}>{icon(T.mute, 14)} {children}</div>;
 
-    const scannedVariant = detail._scannedEan && detail.variants && detail.variants.length > 0
-      ? detail.variants.find((vr) => vr.ean && String(vr.ean).trim() === detail._scannedEan)
+    // Preis direkt aus dem Artikel-Objekt — jetzt immer vorhanden
+    const onSale = detail.sale != null && detail.sale > detail.price;
+    const save   = onSale ? Math.round((1 - detail.price / detail.sale) * 100) : 0;
+
+    // Bestand
+    const stock      = getStock(detail);
+    const stockTotal = getTotalStock(detail);
+    const stockSt    = stockState(stock);
+    const locMax     = Math.max(1, ...ALL_LOC_KEYS.map((k) => detail.locs ? (detail.locs[k] ?? 0) : 0));
+
+    // Master-Lookup (für Slave-Artikel)
+    const masterProduct = !detail.isMaster
+      ? slaveToMaster[String(detail.art || '').trim().toLowerCase()]
+        || (detail.masterArt ? productByArt[detail.masterArt.toLowerCase()] : null)
       : null;
+    const masterShopUrl = masterProduct ? (masterProduct.shopUrl || null) : null;
 
-    const displayStock = scannedVariant
-      ? (scannedVariant.locs ? (scannedVariant.locs[standort.key] ?? 0) : scannedVariant.n)
-      : getProductStock(detail);
-    const displayStockTotal = scannedVariant
-      ? (scannedVariant.locs ? ALL_LOC_KEYS.reduce((s,k) => s+(scannedVariant.locs[k]??0),0) : scannedVariant.total)
-      : getProductTotalStock(detail);
-    const displayStockState = stockState(displayStock);
+    // Geschwister (alle Slaves desselben Masters)
+    const siblings = masterProduct ? getSiblings(masterProduct) : [];
 
-    const displayLocs = scannedVariant && scannedVariant.locs
-      ? ALL_LOC_KEYS.map((k) => {
-          const sd = STANDORTE.find((s) => s.key === k) || { key: k, label: k };
-          return { key: k, label: sd.label, home: k === standort.key, n: scannedVariant.locs[k] ?? 0 };
-        })
-      : (detail.locations || ALL_LOC_KEYS.map((k) => {
-          const sd = STANDORTE.find((s) => s.key === k) || { key: k, label: k };
-          const n = detail.locs ? (detail.locs[k] ?? 0) : 0;
-          return { key: k, label: sd.label, home: k === standort.key, n };
-        }));
-
-    const locMax = Math.max(1, ...displayLocs.map((l) => l.n));
-
-    const isMasterDetail = !!detail.isMaster;
-    const currentArt = scannedVariant && scannedVariant.art ? scannedVariant.art : detail.art;
-
-    // Master-Lookup für Slave-Ansicht
-    const masterProduct = !isMasterDetail
-      ? slaveToMasterIndex[String(currentArt || '').trim().toLowerCase()]
-      : null;
-    const masterShopUrl = masterProduct ? getShopUrl(masterProduct) : null;
-
-    // Slave-Produkte für Master-Ansicht
-    const slaveProducts = isMasterDetail ? getSlavesForMaster(detail) : [];
-    const isMasterWithSlaves = isMasterDetail && slaveProducts.length > 0 && !(detail.price > 0);
-    const slavesTotalCoppi = isMasterWithSlaves
-      ? slaveProducts.reduce((s, p) => s + getProductStock(p), 0)
-      : 0;
-    const slavesTotalAll = isMasterWithSlaves
-      ? slaveProducts.reduce((s, p) => s + getProductTotalStock(p), 0)
-      : 0;
-
-    // Shop-URL: eigene URL des Artikels; für Slave-Ansicht Fallback auf Master-URL
-    const ownShopUrl = getShopUrl(detail);
-    const shopBtnUrl = ownShopUrl || (!isMasterDetail ? masterShopUrl : null);
-
-    // Sibling-Varianten für Slave (alle Geschwister zum selben Master)
-    const siblingVariants = !isMasterDetail && masterProduct
-      ? getSlavesForMaster(masterProduct).map((sp) => ({
-          v:     sp.name.replace(masterProduct.name, '').replace(/^[\s·\-–]+/, '').trim() || sp.art,
-          n:     getProductStock(sp),
-          total: getProductTotalStock(sp),
-          locs:  sp.locations ? Object.fromEntries(sp.locations.map((l) => [l.key, l.n])) : {},
-          ean:   sp.ean,
-          art:   sp.art,
-          image: sp.image,
-          price: sp.price,
-          sale:  sp.sale,
-          _isSibling: true,
-        }))
-      : null;
-
-    // Master-Accordion: alle slaveProducts als virtuelle variants
-    const masterVariants = isMasterWithSlaves
-      ? slaveProducts.map((sp) => ({
-          v:     sp.name.replace(detail.name, '').replace(/^[\s·\-–]+/, '').trim() || sp.art,
-          n:     getProductStock(sp),
-          total: getProductTotalStock(sp),
-          locs:  sp.locations ? Object.fromEntries(sp.locations.map((l) => [l.key, l.n])) : {},
-          ean:   sp.ean,
-          art:   sp.art,
-          image: sp.image,
-          price: sp.price,
-          sale:  sp.sale,
-        }))
-      : null;
+    // Shop-URL: eigene URL bevorzugt, sonst Master-URL als Fallback
+    const shopBtnUrl = detail.shopUrl || (!detail.isMaster ? masterShopUrl : null);
 
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
 
         {/* Header */}
-        <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', paddingTop: padTopDet, paddingLeft: 12, paddingRight: 12, paddingBottom: 11, display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
-          <button onClick={() => setDetail(null)} style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: 'pointer', background: `${standortAccent}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{Icon.back(standortAccent, 22)}</button>
+        <div style={{ background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          paddingTop: padTopDet, paddingLeft: 12, paddingRight: 12, paddingBottom: 11,
+          display: 'flex', alignItems: 'center', gap: 8, borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+          <button onClick={() => setDetail(null)} style={{ width: 38, height: 38, borderRadius: 11, border: 'none', cursor: 'pointer', background: `${standortAccent}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {Icon.back(standortAccent, 22)}
+          </button>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 1 }}>{detail.brand} · {detail.cat}</div>
-            <div style={{ fontSize: F(15), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
-            </div>
+            <div style={{ fontSize: F(15), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{detail.name}</div>
           </div>
           <div style={{ width: 10, height: 10, borderRadius: '50%', background: standortAccent, flexShrink: 0 }} />
         </div>
@@ -589,132 +392,93 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
           {/* Foto + Name */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-            <ProductPhoto product={scannedVariant && scannedVariant.image ? { ...detail, image: scannedVariant.image } : detail} dark={T.dark} radius={T.radius} style={{ width: F(96), height: F(96), flexShrink: 0 }} />
+            <ProductPhoto product={detail} dark={T.dark} radius={T.radius} style={{ width: F(96), height: F(96), flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: F(18), fontWeight: 800, color: T.ink, lineHeight: 1.2, textWrap: 'pretty' }}>
-                {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
-              </div>
+              <div style={{ fontSize: F(18), fontWeight: 800, color: T.ink, lineHeight: 1.2, textWrap: 'pretty' }}>{detail.name}</div>
               <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {detail.inactive && (
-                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #f59e0b55', padding: '2px 8px', borderRadius: 6 }}>
-                    ⚠ Artikel inaktiv
-                  </span>
-                )}
-                {detail.restposten && (
-                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', border: '1px solid #f9731655', padding: '2px 8px', borderRadius: 6 }}>
-                    🏷 Restposten
-                  </span>
-                )}
+                {detail.inactive   && <span style={{ fontSize: F(11), fontWeight: 700, color: '#92400e', background: '#fef3c7', border: '1px solid #f59e0b55', padding: '2px 8px', borderRadius: 6 }}>⚠ Artikel inaktiv</span>}
+                {detail.restposten && <span style={{ fontSize: F(11), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', border: '1px solid #f9731655', padding: '2px 8px', borderRadius: 6 }}>🏷 Restposten</span>}
               </div>
             </div>
           </div>
 
-          {/* KPI tiles */}
-          {isMasterWithSlaves ? (
-            <div style={{ marginTop: T.gap + 4 }}>
-              <Tile>
-                <TileLabel icon={Icon.box}>Gesamtbestand aller Ausführungen · {standort.label}</TileLabel>
-                <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[stockState(slavesTotalCoppi)], marginTop: 6, lineHeight: 1 }}>
-                  {slavesTotalCoppi}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk vor Ort</span>
+          {/* KPI tiles: Preis + Bestand */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
+            <Tile>
+              <TileLabel icon={Icon.tag}>Preis</TileLabel>
+              <div style={{ fontSize: F(24), fontWeight: 800, color: onSale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>
+                {EUR(detail.price)}
+              </div>
+              {onSale ? (
+                <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.sale)}</span>
+                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
                 </div>
-                <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>{slavesTotalAll} Stk gesamt · {slaveProducts.length} Ausführungen</div>
-              </Tile>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
-              <Tile>
-                <TileLabel icon={Icon.tag}>{scannedVariant ? `Preis · ${scannedVariant.v}` : 'Preis'}</TileLabel>
-                <div style={{ fontSize: F(24), fontWeight: 800, color: sale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>{EUR(detail.price)}</div>
-                {sale ? (
-                  <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.sale)}</span>
-                    <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
-                  </div>
-                ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
-              </Tile>
-              <Tile>
-                <TileLabel icon={Icon.box}>
-                  {scannedVariant ? `${detail.variantLabel || 'Ausführung'}: ${scannedVariant.v}` : `Bestand · ${standort.label}`}
-                </TileLabel>
-                <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[displayStockState], marginTop: 6, lineHeight: 1 }}>
-                  {displayStock}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span>
-                </div>
-                <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>vor Ort · {displayStockTotal} gesamt</div>
-                <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
-                  <div style={{ width: `${displayStockTotal ? Math.round((displayStock / displayStockTotal) * 100) : 0}%`, height: '100%', background: T.stock[displayStockState], borderRadius: 6 }} />
-                </div>
-              </Tile>
-            </div>
-          )}
+              ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
+            </Tile>
+            <Tile>
+              <TileLabel icon={Icon.box}>Bestand · {standort.label}</TileLabel>
+              <div style={{ fontSize: F(24), fontWeight: 800, color: T.stock[stockSt], marginTop: 6, lineHeight: 1 }}>
+                {stock}<span style={{ fontSize: F(13), fontWeight: 600, color: T.mute }}> Stk</span>
+              </div>
+              <div style={{ marginTop: 5, fontSize: F(11), color: T.mute }}>vor Ort · {stockTotal} gesamt</div>
+              <div style={{ marginTop: 7, height: 6, borderRadius: 6, background: T.dark ? 'rgba(255,255,255,0.1)' : '#e7ecf3', overflow: 'hidden' }}>
+                <div style={{ width: `${stockTotal ? Math.round((stock / stockTotal) * 100) : 0}%`, height: '100%', background: T.stock[stockSt], borderRadius: 6 }} />
+              </div>
+            </Tile>
+          </div>
 
           {/* Bestand nach Standort */}
-          {displayLocs && displayLocs.length > 0 && (
+          {detail.locs && (
             <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-              <TileLabel icon={Icon.box}>Bestand nach Standort{scannedVariant ? ` · ${scannedVariant.v}` : ''}</TileLabel>
+              <TileLabel icon={Icon.box}>Bestand nach Standort</TileLabel>
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-                {displayLocs.map((loc) => (
-                  <div key={loc.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 96, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: F(13), fontWeight: loc.home ? 700 : 500, color: loc.home ? standortAccent : T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.label}</span>
-                      {loc.home && <span style={{ fontSize: F(9), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, padding: '1px 5px', borderRadius: 5, textTransform: 'uppercase', letterSpacing: 0.4, flexShrink: 0 }}>hier</span>}
+                {ALL_LOC_KEYS.map((locKey) => {
+                  const sd   = STANDORTE.find((s) => s.key === locKey) || { key: locKey, label: locKey };
+                  const n    = detail.locs[locKey] ?? 0;
+                  const home = locKey === standort.key;
+                  return (
+                    <div key={locKey} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 96, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: F(13), fontWeight: home ? 700 : 500, color: home ? standortAccent : T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sd.label}</span>
+                        {home && <span style={{ fontSize: F(9), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, padding: '1px 5px', borderRadius: 5, textTransform: 'uppercase', letterSpacing: 0.4, flexShrink: 0 }}>hier</span>}
+                      </div>
+                      <div style={{ flex: 1, height: 8, borderRadius: 8, background: T.dark ? 'rgba(255,255,255,0.08)' : '#e7ecf3', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.round((n / locMax) * 100)}%`, height: '100%', borderRadius: 8, background: n === 0 ? 'transparent' : home ? standortAccent : (T.dark ? 'rgba(231,239,247,0.4)' : '#9fb0c6') }} />
+                      </div>
+                      <span style={{ width: 28, textAlign: 'right', fontSize: F(13), fontWeight: 700, color: n ? T.ink : T.mute }}>{n}</span>
                     </div>
-                    <div style={{ flex: 1, height: 8, borderRadius: 8, background: T.dark ? 'rgba(255,255,255,0.08)' : '#e7ecf3', overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.round((loc.n / locMax) * 100)}%`, height: '100%', borderRadius: 8, background: loc.n === 0 ? 'transparent' : loc.home ? standortAccent : (T.dark ? 'rgba(231,239,247,0.4)' : '#9fb0c6') }} />
-                    </div>
-                    <span style={{ width: 28, textAlign: 'right', fontSize: F(13), fontWeight: 700, color: loc.n ? T.ink : T.mute }}>{loc.n}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {/* Ausführungen-Accordion */}
-          {isMasterWithSlaves && masterVariants && masterVariants.length > 0 && (
-            <VariantAccordion detail={{ ...detail, variants: masterVariants, variantLabel: 'Ausführung', _scannedEan: null }} T={T} F={F} stockState={stockState} />
-          )}
-          {!isMasterDetail && siblingVariants && siblingVariants.length > 0 && (
-            <VariantAccordion detail={{ ...detail, variants: siblingVariants, variantLabel: 'Ausführung', _scannedEan: detail._scannedEan || detail.ean }} T={T} F={F} stockState={stockState} />
-          )}
-          {!isMasterWithSlaves && isMasterDetail && detail.variants && detail.variants.length > 0 && (
-            <VariantAccordion detail={detail} T={T} F={F} stockState={stockState} />
-          )}
-          {!isMasterDetail && !siblingVariants && detail.variants && detail.variants.length > 0 && (
-            <VariantAccordion detail={detail} T={T} F={F} stockState={stockState} />
-          )}
-
-          {detail.desc && (
-            <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-              <div style={{ fontSize: F(14), lineHeight: 1.5, color: T.dark ? 'rgba(231,239,247,0.8)' : '#3a4a59', textWrap: 'pretty' }}>{detail.desc}</div>
-            </div>
+          {/* Geschwister-Accordion */}
+          {siblings.length > 0 && (
+            <SiblingsAccordion siblings={siblings} currentEan={detail._scannedEan} T={T} F={F} />
           )}
 
           {/* Spec-Tabelle */}
           <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, overflow: 'hidden', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
             {[
-              detail.brand ? ['Hersteller', detail.brand, false] : null,
-              detail.cat   ? ['Kategorie',  detail.cat,   false] : null,
-            ].filter(Boolean).map(([k, v, mono], i) => (
+              detail.brand ? ['Hersteller', detail.brand] : null,
+              detail.cat   ? ['Kategorie',  detail.cat]   : null,
+            ].filter(Boolean).map(([k, v], i) => (
               <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, background: i % 2 && !T.dark ? '#fafbfd' : 'transparent', borderTop: i ? `1px solid ${T.border}` : 'none' }}>
                 <span style={{ color: T.mute, fontSize: F(13) }}>{k}</span>
-                <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right', fontFamily: mono ? 'ui-monospace, Menlo, monospace' : 'inherit' }}>{v}</span>
+                <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right' }}>{v}</span>
               </div>
             ))}
 
-            {/* Master-Artikel: immer anzeigen wenn Slave-Artikel, mit Shop-Link wenn verfügbar */}
-            {!isMasterDetail && masterProduct && (
+            {/* Master-Link (nur für Slave-Artikel) */}
+            {masterProduct && (
               masterShopUrl ? (
-                <a
-                  href={masterShopUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    gap: 16, padding: `${T.pad - 4}px ${T.pad}px`,
-                    borderTop: `1px solid ${T.border}`,
+                <a href={masterShopUrl} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16,
+                    padding: `${T.pad - 4}px ${T.pad}px`, borderTop: `1px solid ${T.border}`,
                     textDecoration: 'none', cursor: 'pointer',
-                    background: T.dark ? `${standortAccent}0d` : `${standortAccent}07`,
-                  }}
-                >
+                    background: T.dark ? `${standortAccent}0d` : `${standortAccent}07` }}>
                   <span style={{ color: T.mute, fontSize: F(13) }}>Masterartikel im Shop</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: standortAccent, fontSize: F(13), fontWeight: 700, fontFamily: 'ui-monospace, Menlo, monospace' }}>
                     {masterProduct.art}
@@ -733,27 +497,20 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             )}
           </div>
 
-          {/* Art.-Nr. + EAN Footer */}
+          {/* Art.-Nr. + EAN */}
           <div style={{ marginTop: 10, marginBottom: shopBtnUrl ? 4 : 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
-            <span>Art. {currentArt}</span>
-            <span>EAN {detail._scannedEan || detail.ean}</span>
+            <span>Art. {detail.art}</span>
+            <span>EAN {detail.ean}</span>
           </div>
 
           {/* Onlineshop-Button */}
           {shopBtnUrl && (
-            <a
-              href={shopBtnUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            <a href={shopBtnUrl} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 width: '100%', padding: `${F(12)}px 0`, marginBottom: T.gap,
                 borderRadius: T.radius, border: `1.5px solid ${standortAccent}55`,
                 background: `${standortAccent}0e`, color: standortAccent,
-                fontSize: F(14), fontWeight: 700, textDecoration: 'none',
-                fontFamily: 'inherit',
-              }}
-            >
+                fontSize: F(14), fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>
               <svg width={16} height={16} viewBox="0 0 24 24" fill="none">
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -767,20 +524,25 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
         </div>
 
         <div style={{ paddingTop: 11, paddingLeft: T.pad, paddingRight: T.pad, paddingBottom: padBotBtn, background: T.bg, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
-          <button onClick={() => { setDetail(null); setTab('scan'); }} style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', background: standortAccent, color: T.dark ? '#06131f' : '#fff', fontSize: F(16), fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>{Icon.scan(T.dark ? '#06131f' : '#fff', 20)} Nächsten Artikel scannen</button>
+          <button onClick={() => { setDetail(null); setTab('scan'); }}
+            style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', background: standortAccent,
+              color: T.dark ? '#06131f' : '#fff', fontSize: F(16), fontWeight: 800,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>
+            {Icon.scan(T.dark ? '#06131f' : '#fff', 20)} Nächsten Artikel scannen
+          </button>
         </div>
       </div>
     );
   })();
 
-  // ── scan tab ─────────────────────────────────────────────────
+  // ── Scan-Tab ──────────────────────────────────────────────────
   const onText = T.dark ? '#06131f' : '#fff';
   const scanTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
       <Header title="Scannen" sub={meta || 'Artikel-Etikett erfassen'} />
       <div style={{ flex: 1, overflow: 'auto', padding: T.pad }}>
-
         <div style={{ background: T.card, borderRadius: 18, padding: 18, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+
           <div style={{ position: 'relative', width: '100%', maxWidth: 300, aspectRatio: '1 / 1', borderRadius: 18, background: '#06131f', border: `1px solid ${T.border}`, overflow: 'hidden' }}>
             <div id="scanner-cam" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
             {cam !== 'live' && (
@@ -788,10 +550,13 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
                 <div style={{ opacity: 0.55, display: 'flex' }}>{Icon.qr(standortAccent, 58)}</div>
               </div>
             )}
-            {[['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']].map(([v, h], i) => (
-              <div key={i} style={{ position: 'absolute', [v]: 16, [h]: 16, width: 28, height: 28, pointerEvents: 'none', [`border${v[0].toUpperCase() + v.slice(1)}`]: `3px solid ${cam === 'live' ? '#fff' : standortAccent}`, [`border${h[0].toUpperCase() + h.slice(1)}`]: `3px solid ${cam === 'live' ? '#fff' : standortAccent}`, borderRadius: v === 'top' ? (h === 'left' ? '8px 0 0 0' : '0 8px 0 0') : (h === 'left' ? '0 0 0 8px' : '0 0 8px 0') }} />
+            {[['top','left'],['top','right'],['bottom','left'],['bottom','right']].map(([v, h], i) => (
+              <div key={i} style={{ position: 'absolute', [v]: 16, [h]: 16, width: 28, height: 28, pointerEvents: 'none',
+                [`border${v[0].toUpperCase()+v.slice(1)}`]: `3px solid ${cam === 'live' ? '#fff' : standortAccent}`,
+                [`border${h[0].toUpperCase()+h.slice(1)}`]: `3px solid ${cam === 'live' ? '#fff' : standortAccent}`,
+                borderRadius: v === 'top' ? (h === 'left' ? '8px 0 0 0' : '0 8px 0 0') : (h === 'left' ? '0 0 0 8px' : '0 0 8px 0') }} />
             ))}
-            {cam === 'live' && <div className="scanline" style={{ position: 'absolute', left: 16, right: 16, height: 3, borderRadius: 3, background: `linear-gradient(90deg,transparent,#fff,transparent)`, boxShadow: `0 0 12px #fff` }} />}
+            {cam === 'live' && <div className="scanline" style={{ position: 'absolute', left: 16, right: 16, height: 3, borderRadius: 3, background: 'linear-gradient(90deg,transparent,#fff,transparent)', boxShadow: '0 0 12px #fff' }} />}
           </div>
 
           <div style={{ marginTop: 14, fontWeight: 700, color: T.ink, fontSize: F(16) }}>
@@ -808,26 +573,32 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             : <button onClick={startCamera} style={{ marginTop: 14, width: '100%', height: 52, borderRadius: 14, border: 'none', cursor: 'pointer', background: standortAccent, color: onText, fontSize: F(16), fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>{Icon.scan(onText, 20)} Kamera starten</button>}
 
           <div style={{ marginTop: 10, width: '100%', display: 'flex', gap: 8 }}>
-            <input value={manual} onChange={(e) => setManual(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && manual.trim()) { handleCode(manual.trim()); setManual(''); } }} placeholder="EAN oder Art.-Nr. eingeben" style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 11, border: `1px solid ${T.border}`, background: T.field, color: T.ink, padding: '0 12px', fontSize: F(15), fontFamily: 'inherit', outline: 'none' }} />
-            <button onClick={() => { if (manual.trim()) { handleCode(manual.trim()); setManual(''); } }} style={{ flexShrink: 0, height: 44, padding: '0 16px', borderRadius: 11, border: 'none', cursor: 'pointer', background: `${standortAccent}18`, color: standortAccent, fontSize: F(15), fontWeight: 700, fontFamily: 'inherit' }}>Suchen</button>
+            <input value={manual} onChange={(e) => setManual(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && manual.trim()) { handleCode(manual.trim()); setManual(''); } }}
+              placeholder="EAN oder Art.-Nr. eingeben"
+              style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 11, border: `1px solid ${T.border}`, background: T.field, color: T.ink, padding: '0 12px', fontSize: F(15), fontFamily: 'inherit', outline: 'none' }} />
+            <button onClick={() => { if (manual.trim()) { handleCode(manual.trim()); setManual(''); } }}
+              style={{ flexShrink: 0, height: 44, padding: '0 16px', borderRadius: 11, border: 'none', cursor: 'pointer', background: `${standortAccent}18`, color: standortAccent, fontSize: F(15), fontWeight: 700, fontFamily: 'inherit' }}>Suchen</button>
           </div>
         </div>
 
         {history.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <div style={{ fontSize: F(12), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, fontWeight: 700 }}>Zuletzt gescannt</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: T.gap - 2 }}>{history.slice(0, 3).map((h) => <ListRow key={h.p.ean || h.p.id} p={h.p} />)}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: T.gap - 2 }}>
+              {history.slice(0, 3).map((h) => <ListRow key={h.p.ean || h.p.id} p={h.p} />)}
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 
-  // ── search tab ───────────────────────────────────────────────
+  // ── Suche-Tab ─────────────────────────────────────────────────
   const q2 = q.trim().toLowerCase();
   const tokenMatch = (s, toks) => toks.every((t) => s.includes(t));
-  const allBrands = useMemo(() => [...new Set(PRODUCTS.map((p) => p.brand).filter(Boolean))].sort(), [PRODUCTS]);
-  const allCats   = useMemo(() => [...new Set(PRODUCTS.map((p) => p.cat).filter(Boolean))].sort(), [PRODUCTS]);
+  const allBrands = useMemo(() => [...new Set(PRODUCTS.filter((p) => !p.isMaster).map((p) => p.brand).filter(Boolean))].sort(), [PRODUCTS]);
+  const allCats   = useMemo(() => [...new Set(PRODUCTS.filter((p) => !p.isMaster).map((p) => p.cat).filter(Boolean))].sort(),   [PRODUCTS]);
   const [filterBrand, setFilterBrand] = useState(null);
   const [filterCat,   setFilterCat]   = useState(null);
   const toks = q2.length >= 2 ? q2.split(/\s+/).filter(Boolean) : [];
@@ -835,7 +606,8 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   const matches = useMemo(() => {
     return PRODUCTS.filter((p) => {
-      const s = p._s || (p.name + ' ' + p.brand + ' ' + p.art + ' ' + p.cat + ' ' + (p.allEans || []).join(' ')).toLowerCase();
+      if (p.isMaster) return false; // Master-Artikel nicht in Suchergebnissen
+      const s = p._s || (p.name + ' ' + p.brand + ' ' + p.art + ' ' + p.cat + ' ' + p.ean).toLowerCase();
       const textOk  = toks.length === 0 || tokenMatch(s, toks);
       const brandOk = !filterBrand || p.brand === filterBrand;
       const catOk   = !filterCat   || p.cat   === filterCat;
@@ -847,18 +619,22 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const activeFilters = (filterBrand ? 1 : 0) + (filterCat ? 1 : 0);
 
   const Chip = ({ label, active, onPress }) => (
-    <button onClick={onPress} style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 20, border: `1.5px solid ${active ? standortAccent : T.border}`, background: active ? standortAccent : T.card, color: active ? (T.dark ? '#06131f' : '#fff') : T.ink, fontSize: F(12), fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+    <button onClick={onPress} style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 20,
+      border: `1.5px solid ${active ? standortAccent : T.border}`, background: active ? standortAccent : T.card,
+      color: active ? (T.dark ? '#06131f' : '#fff') : T.ink, fontSize: F(12), fontWeight: active ? 700 : 500,
+      cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
       {label}{active ? ' ×' : ''}
     </button>
   );
 
   const searchTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-      <Header title="Suche" sub={`${PRODUCTS.length.toLocaleString('de-DE')} Artikel im Sortiment`} />
+      <Header title="Suche" sub={`${PRODUCTS.filter((p) => !p.isMaster).length.toLocaleString('de-DE')} Artikel im Sortiment`} />
       <div style={{ padding: `12px ${T.pad}px 0` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.field, borderRadius: 12, padding: '10px 14px', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
           {Icon.search(T.mute, 18)}
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, Marke, Art.-Nr. oder EAN" style={{ border: 'none', outline: 'none', flex: 1, fontSize: F(15), color: T.ink, background: 'transparent', fontFamily: 'inherit' }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, Marke, Art.-Nr. oder EAN"
+            style={{ border: 'none', outline: 'none', flex: 1, fontSize: F(15), color: T.ink, background: 'transparent', fontFamily: 'inherit' }} />
           {(q || activeFilters > 0) && (
             <button onClick={() => { setQ(''); setFilterBrand(null); setFilterCat(null); }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>{Icon.close(T.mute, 18)}</button>
           )}
@@ -892,11 +668,12 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     </div>
   );
 
-  // ── history tab ──────────────────────────────────────────────
+  // ── Verlauf-Tab ───────────────────────────────────────────────
   const fmtTime = (ts) => new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   const historyTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-      <Header title="Verlauf" sub={history.length ? `${history.length} Artikel gescannt` : 'Noch nichts gescannt'} right={history.length ? <button onClick={() => setHistory([])} style={{ border: 'none', background: 'none', color: standortAccent, fontSize: F(14), fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', paddingBottom: 2 }}>Leeren</button> : null} />
+      <Header title="Verlauf" sub={history.length ? `${history.length} Artikel gescannt` : 'Noch nichts gescannt'}
+        right={history.length ? <button onClick={() => setHistory([])} style={{ border: 'none', background: 'none', color: standortAccent, fontSize: F(14), fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', paddingBottom: 2 }}>Leeren</button> : null} />
       <div style={{ flex: 1, overflow: 'auto', padding: T.pad, display: 'flex', flexDirection: 'column', gap: T.gap - 2 }}>
         {history.length ? history.map((h) => <ListRow key={h.p.ean || h.p.id} p={h.p} time={fmtTime(h.at)} />) : (
           <div style={{ textAlign: 'center', color: T.mute, marginTop: 60 }}>
@@ -908,6 +685,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     </div>
   );
 
+  // ── Tab-Bar ───────────────────────────────────────────────────
   const TabBtn = ({ id, label, icon }) => {
     const active = tab === id;
     return (
@@ -926,15 +704,15 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     <div style={{ height: '100%', position: 'relative', background: T.bg, color: T.ink }}>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 1, overflow: 'hidden', paddingBottom: 64 }}>
-          {tab === 'scan' && scanTab}
-          {tab === 'search' && searchTab}
+          {tab === 'scan'    && scanTab}
+          {tab === 'search'  && searchTab}
           {tab === 'history' && historyTab}
         </div>
       </div>
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 9, background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderTop: `1px solid ${T.border}`, paddingBottom: padBotTabs, display: 'flex' }}>
         <AccentStrip />
-        <TabBtn id="scan" label="Scannen" icon={Icon.scan} />
-        <TabBtn id="search" label="Suche" icon={Icon.search} />
+        <TabBtn id="scan"    label="Scannen" icon={Icon.scan} />
+        <TabBtn id="search"  label="Suche"   icon={Icon.search} />
         <TabBtn id="history" label="Verlauf" icon={Icon.history} />
       </div>
       <div style={{ position: 'absolute', inset: 0, zIndex: 20, transform: detail ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .3s cubic-bezier(.22,1,.36,1)', pointerEvents: detail ? 'auto' : 'none' }}>
