@@ -11,14 +11,13 @@ const ACCENTS = {
 };
 
 // ── Standorte mit je eigenem Farbthema ──────────────────────────────────────
-// Standorte — key muss exakt dem Spaltenname in Google Sheets entsprechen
-// Spalte E=Coppi, F=Zentrallager, G=Steglitz, H=Freiburg, I=Hamburg
+// Standorte — keys exakt wie in data-source.js LOCATIONS definiert
 const STANDORTE = [
-  { key: 'Coppi',         label: 'Coppi',          shortLabel: 'Coppi',        accent: '#1a3c6e', accentDark: '#6ea4ea', emoji: '🔵' },
-  { key: 'Zentrallager',  label: 'Zentrallager',   shortLabel: 'Zentrallager', accent: '#374151', accentDark: '#9ca3af', emoji: '⚫' },
-  { key: 'Steglitz',      label: 'Steglitz',        shortLabel: 'Steglitz',     accent: '#166534', accentDark: '#4ade80', emoji: '🟢' },
-  { key: 'Freiburg',      label: 'Freiburg',        shortLabel: 'Freiburg',     accent: '#7c2d12', accentDark: '#fb923c', emoji: '🟠' },
-  { key: 'Hamburg',       label: 'Hamburg',         shortLabel: 'Hamburg',      accent: '#581c87', accentDark: '#c084fc', emoji: '🟣' },
+  { key: 'coppi',     label: 'Coppi',        shortLabel: 'Coppi',        accent: '#1a3c6e', accentDark: '#6ea4ea', emoji: '🔵' },
+  { key: 'zentral',   label: 'Zentrallager', shortLabel: 'Zentrallager', accent: '#374151', accentDark: '#9ca3af', emoji: '⚫' },
+  { key: 'steglitz',  label: 'Steglitz',     shortLabel: 'Steglitz',     accent: '#166534', accentDark: '#4ade80', emoji: '🟢' },
+  { key: 'freiburg',  label: 'Freiburg',     shortLabel: 'Freiburg',     accent: '#7c2d12', accentDark: '#fb923c', emoji: '🟠' },
+  { key: 'hamburg',   label: 'Hamburg',      shortLabel: 'Hamburg',      accent: '#581c87', accentDark: '#c084fc', emoji: '🟣' },
 ];
 
 // Alle Standort-Keys in der gewünschten Anzeigereihenfolge
@@ -569,7 +568,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
           {/* Foto + Name */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-            <ProductPhoto product={detail} dark={T.dark} radius={T.radius} style={{ width: F(96), height: F(96), flexShrink: 0 }} />
+            <ProductPhoto product={scannedVariant && scannedVariant.image ? { ...detail, image: scannedVariant.image } : detail} dark={T.dark} radius={T.radius} style={{ width: F(96), height: F(96), flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: F(18), fontWeight: 800, color: T.ink, lineHeight: 1.2, textWrap: 'pretty' }}>
                 {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
