@@ -119,9 +119,6 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const price = num(anchor.PREIS);
       const onSale = uvp > 0 && price < uvp - 0.001;
 
-      const deactivated = rows.some((r) => /deaktiviert/i.test(nameOf(r)) || /deaktiviert/i.test(r.KATEGORIE || ''));
-      if (deactivated || !(price > 0)) return null;
-
       const art = (master && master.ARTIKELNR) ? master.ARTIKELNR : ((scannables[0] && scannables[0].ARTIKELNR) || anchor.ARTIKELNR || '');
       const arts = [...new Set([art, ...rows.map((r) => r.ARTIKELNR)].filter(Boolean))];
       const rawImg = anchor.BILD_URL || (scannables.find((s) => s.BILD_URL) || {}).BILD_URL || '';
