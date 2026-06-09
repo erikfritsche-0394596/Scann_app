@@ -115,8 +115,13 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const price = num(anchor.PREIS);
       const onSale = uvp > 0 && price < uvp - 0.001;
 
-      const deactivated = rows.some((r) => /deaktiviert/i.test(nameOf(r)) || /deaktiviert/i.test(r.KATEGORIE || ''));
-      if (deactivated || !(price > 0)) return null;
+      if (!(price > 0)) return null;
+
+      // Status & Restposten aus den neuen Spalten
+      const statusVal = (anchor.Status || scannables[0]?.Status || '').trim();
+      const restpostenVal = (anchor.Restposten || scannables[0]?.Restposten || '').trim().toUpperCase();
+      const isInactive = statusVal === '0';
+      const isRestposten = restpostenVal === 'JA';
 
       const art = (master && master.ARTIKELNR) ? master.ARTIKELNR : ((scannables[0] && scannables[0].ARTIKELNR) || anchor.ARTIKELNR || '');
       const arts = [...new Set([art, ...rows.map((r) => r.ARTIKELNR)].filter(Boolean))];
@@ -147,7 +152,12 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
           ['Kategorie',  cat],
         ],
         desc: '',
-        note: null,
+        note: isInactive && isRestposten ? 'Artikel inaktiv · Restposten'
+              : isInactive ? 'Artikel inaktiv'
+              : isRestposten ? 'Restposten'
+              : null,
+        inactive: isInactive,
+        restposten: isRestposten,
         image,
         _s: (name + ' ' + brand + ' ' + arts.join(' ') + ' ' + cat + ' ' + eans.join(' ')).toLowerCase(),
       };
