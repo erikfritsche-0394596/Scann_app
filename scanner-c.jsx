@@ -401,7 +401,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const ListRow = ({ p, time }) => {
     const pStockCur = getProductStock(p);
     const st = stockState(pStockCur);
-    const sale = p.sale != null;
+    const sale = p.sale != null && p.price > 0;
     return (
       <button onClick={() => open(p)} style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: T.card, border: `1px solid ${T.border}`, borderRadius: T.radius, padding: T.pad - 2, display: 'flex', gap: 12, alignItems: 'center', boxShadow: T.tileShadow, fontFamily: 'inherit' }}>
         <ProductPhoto product={p} dark={T.dark} radius={10} style={{ width: F(52), height: F(52), flexShrink: 0 }} />
@@ -560,7 +560,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   // ── detail ───────────────────────────────────────────────────
   const detailScreen = detail && (() => {
-    const sale = detail.sale != null;
+    const sale = detail.sale != null && detail.price > 0;
     const save = sale ? Math.round((1 - detail.sale / detail.price) * 100) : 0;
     const Tile = ({ children }) => <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>{children}</div>;
     const TileLabel = ({ icon, children }) => <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5 }}>{icon(T.mute, 14)} {children}</div>;
