@@ -495,8 +495,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       );
     };
 
-    const stockColor = (n) => n <= 0 ? T.stock.out : n <= 2 ? T.stock.low : T.stock.ok;
-
     return (
       <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, overflow: 'hidden' }}>
         <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, display: 'flex', alignItems: 'center', gap: 5, padding: `${F(10)}px ${F(14)}px`, borderBottom: `1px solid ${T.border}` }}>
