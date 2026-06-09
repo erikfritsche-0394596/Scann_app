@@ -636,29 +636,16 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
-          {/* Spec-Tabelle */}
+          {/* Spec-Tabelle: nur Hersteller, Master-Art.-Nr., Kategorie */}
           <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, overflow: 'hidden', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
-            {/* ── NEU: Hersteller-Zeile + Master-Art.-Nr. ── */}
-            {(detail.brand || masterArt) && (
-              <>
-                {detail.brand && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, background: T.dark ? 'transparent' : '#fafbfd' }}>
-                    <span style={{ color: T.mute, fontSize: F(13) }}>Hersteller</span>
-                    <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right' }}>{detail.brand}</span>
-                  </div>
-                )}
-                {masterArt && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, borderTop: `1px solid ${T.border}`, background: 'transparent' }}>
-                    <span style={{ color: T.mute, fontSize: F(13) }}>Master-Art.-Nr.</span>
-                    <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right', fontFamily: 'ui-monospace, Menlo, monospace' }}>{masterArt}</span>
-                  </div>
-                )}
-              </>
-            )}
-            {detail.specs.map(([k, v], i) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, background: i % 2 && !T.dark ? '#fafbfd' : 'transparent', borderTop: `1px solid ${T.border}` }}>
+            {[
+              detail.brand   ? ['Hersteller',     detail.brand,  false] : null,
+              masterArt      ? ['Master-Art.-Nr.', masterArt,    true]  : null,
+              detail.cat     ? ['Kategorie',       detail.cat,   false] : null,
+            ].filter(Boolean).map(([k, v, mono], i) => (
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, background: i % 2 && !T.dark ? '#fafbfd' : 'transparent', borderTop: i ? `1px solid ${T.border}` : 'none' }}>
                 <span style={{ color: T.mute, fontSize: F(13) }}>{k}</span>
-                <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right' }}>{v}</span>
+                <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right', fontFamily: mono ? 'ui-monospace, Menlo, monospace' : 'inherit' }}>{v}</span>
               </div>
             ))}
           </div>
@@ -712,13 +699,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
       <Header title="Scannen" sub={meta || 'Artikel-Etikett erfassen'} />
       <div style={{ flex: 1, overflow: 'auto', padding: T.pad }}>
-
-        {/* Farbiger Standort-Banner */}
-        <div style={{ background: `${standortAccent}12`, border: `1px solid ${standortAccent}30`, borderRadius: T.radius, padding: '10px 14px', marginBottom: T.gap, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 12, height: 12, borderRadius: '50%', background: standortAccent, flexShrink: 0 }} />
-          <span style={{ fontSize: F(13), fontWeight: 700, color: standortAccent }}>{standort.label}</span>
-          <button onClick={() => setShowStandortPicker(true)} style={{ marginLeft: 'auto', border: 'none', background: 'none', color: standortAccent, fontSize: F(12), fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: 0.7 }}>ändern</button>
-        </div>
 
         <div style={{ background: T.card, borderRadius: 18, padding: 18, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ position: 'relative', width: '100%', maxWidth: 300, aspectRatio: '1 / 1', borderRadius: 18, background: '#06131f', border: `1px solid ${T.border}`, overflow: 'hidden' }}>
