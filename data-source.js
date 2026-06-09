@@ -96,15 +96,21 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       constants.forEach((k) => { const v = distinct(k)[0]; if (v) name += ` · ${v}`; });
 
       // ── Varianten: mit Art.-Nr. UND variantenspezifischem Bild ──
-      const variants = isVariantProduct ? attrRows.map((x) => ({
-        v:     varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
-        n:     x.loc[HOME.key],
-        total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
-        locs:  x.loc,
-        ean:   x.r.EAN,
-        art:   x.r.ARTIKELNR || '',
-        image: resolveImg(x.r.BILD_URL || ''),  // ← NEU: Bild pro Variante
-      })) : [];
+      const variants = isVariantProduct ? attrRows.map((x) => {
+        const vUvp = num(x.r.UVP); const vPrice = num(x.r.PREIS);
+        const vOnSale = vUvp > 0 && vPrice < vUvp - 0.001;
+        return {
+          v:     varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
+          n:     x.loc[HOME.key],
+          total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
+          locs:  x.loc,
+          ean:   x.r.EAN,
+          art:   x.r.ARTIKELNR || '',
+          image: resolveImg(x.r.BILD_URL || ''),
+          price: vOnSale ? vUvp : vPrice,
+          sale:  vOnSale ? vPrice : null,
+        };
+      }) : [];
 
       const allLocRows = attrRows.map((x) => x.loc);
       const totalsByLoc = sumLocs(allLocRows);
