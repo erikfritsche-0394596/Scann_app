@@ -207,6 +207,32 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return m;
   }, [PRODUCTS]);
 
+  // slavesByMasterArt: { masterArt_lowercase → [slave-products] }
+  // Alle Produkte ohne eigenen Master-Datensatz (isMaster=false) werden über ihre
+  // Art.-Nrn. dem Master zugeordnet, falls dessen Art.-Nr. als Präfix vorkommt.
+  // Einfacherer Ansatz: jedes Produkt kennt seine slaveArts (aus data-source.js);
+  // wir bauen den umgekehrten Index: slaveArt → masterProduct.
+  const slaveToMasterIndex = useMemo(() => {
+    const m = {};
+    (PRODUCTS || []).forEach((p) => {
+      if (!p.isMaster) return;
+      (p.slaveArts || []).forEach((sa) => {
+        if (sa) m[String(sa).trim().toLowerCase()] = p;
+      });
+    });
+    return m;
+  }, [PRODUCTS]);
+
+  // Alle Slave-Produkte die zu einem Master gehören (über Art.-Nr.-Lookup)
+  const getSlavesForMaster = useCallback((masterProduct) => {
+    if (!masterProduct || !masterProduct.isMaster) return [];
+    const slaveArts = (masterProduct.slaveArts || []).map((a) => String(a).trim().toLowerCase());
+    return slaveArts
+      .map((a) => productByArt[a])
+      .filter(Boolean)
+      .filter((p) => p.id !== masterProduct.id);
+  }, [productByArt]);
+
   // Sucht den Masterartikel für einen gescannten Art.-Nr.-Code über den Shop-Index.
   // Gibt { product, variant } zurück — product = Master, variant = die gescannte Variante darin.
   const findMasterViaShopIndex = (artKey) => {
@@ -254,22 +280,33 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       setNotFound(null);
       stopCamera();
 
-      // Scanned EAN für die Variante ermitteln
       const scannedEan = result.isEan
         ? result.code
         : (result.variant && result.variant.ean ? String(result.variant.ean).trim() : null);
 
-      // Ist die gefundene Variante ein Slave? → Master über Shop-Index suchen
-      // Eine Variante ist ein Slave wenn ihr Art.-Nr. im shopIndex eine masterId hat
-      const varArt = result.variant ? result.variant.art : (result.isEan ? null : code.trim());
-      const masterResult = varArt ? findMasterViaShopIndex(varArt) : null;
+      // 1. Prüfe ob gescannter Artikel ein Slave ist (direkt aus Produktdaten)
+      const foundProduct = result.product;
+      const artKey = result.variant
+        ? String(result.variant.art || '').trim().toLowerCase()
+        : (!result.isEan ? String(code).trim().toLowerCase() : '');
 
-      if (masterResult) {
-        // Slave gescannt → Masterartikel öffnen, aber gescannte EAN merken
-        // damit die richtige Variante hervorgehoben wird
-        open(masterResult.product, scannedEan || (masterResult.variant && masterResult.variant.ean ? String(masterResult.variant.ean).trim() : null));
+      // Slave-Check: Art.-Nr. des gefundenen Artikels im slaveToMasterIndex?
+      const masterFromProductData = artKey ? slaveToMasterIndex[artKey] : null;
+
+      // 2. Fallback: Shop-Index (wie bisher)
+      const masterFromShopIndex = !masterFromProductData && artKey
+        ? findMasterViaShopIndex(artKey)
+        : null;
+
+      if (masterFromProductData) {
+        // Slave gescannt → Masterartikel aus Produktdaten öffnen
+        open(masterFromProductData, scannedEan);
+      } else if (masterFromShopIndex) {
+        // Slave gescannt → Masterartikel über Shop-Index öffnen
+        open(masterFromShopIndex.product, scannedEan || (masterFromShopIndex.variant?.ean ? String(masterFromShopIndex.variant.ean).trim() : null));
       } else {
-        open(result.product, scannedEan);
+        // Master oder Einzelartikel gescannt → direkt öffnen
+        open(foundProduct, scannedEan);
       }
     } else {
       setNotFound(String(code).trim());
@@ -595,6 +632,10 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     const currentArt = scannedVariant && scannedVariant.art ? scannedVariant.art : detail.art;
     const shopUrl = getShopUrl(currentArt);
 
+    // ── Slave-Artikel: alle Artikel die zu diesem Master gehören ──
+    const isMasterDetail = !!detail.isMaster;
+    const slaveProducts = isMasterDetail ? getSlavesForMaster(detail) : [];
+
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
 
@@ -706,6 +747,49 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               </div>
             ))}
           </div>
+
+          {/* ── Slave-Artikel des Masters ── */}
+          {isMasterDetail && slaveProducts.length > 0 && (
+            <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, overflow: 'hidden', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
+              <div style={{ padding: `${T.pad - 2}px ${T.pad}px ${T.pad - 6}px`, borderBottom: `1px solid ${T.border}` }}>
+                <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>
+                  Zugehörige Slave-Artikel ({slaveProducts.length})
+                </div>
+              </div>
+              {slaveProducts.map((sp, i) => {
+                const spStock = getProductStock(sp);
+                const spTotal = getProductTotalStock(sp);
+                const spState = stockState(spStock);
+                return (
+                  <button
+                    key={sp.id || i}
+                    onClick={() => open(sp)}
+                    style={{
+                      width: '100%', textAlign: 'left', cursor: 'pointer',
+                      background: i % 2 && !T.dark ? '#fafbfd' : T.card,
+                      border: 'none', borderTop: `1px solid ${T.border}`,
+                      padding: `${T.pad - 3}px ${T.pad}px`,
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <ProductPhoto product={sp} dark={T.dark} radius={6} style={{ width: F(40), height: F(40), flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: F(13), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sp.name}</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 3, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>{sp.art}</span>
+                        {sp.ean && <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>EAN {sp.ean}</span>}
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                      <div style={{ fontSize: F(14), fontWeight: 800, color: T.stock[spState] }}>{spStock}</div>
+                      <div style={{ fontSize: F(10), color: T.mute }}>/{spTotal} Stk</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Art.-Nr. + EAN Footer */}
           <div style={{ marginTop: 10, marginBottom: shopUrl ? 4 : 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
