@@ -1,30 +1,18 @@
 // Atlantis live data source — maps the Filiale sheet (Coppi-Hauptbestand,
 // weitere Lager, Varianten ohne laufende Nummer) onto the scanner product shape.
-//
-// ── How to connect your real sheet ────────────────────────────────────────
-//   Weg 1 (öffentlich):  Datei → Freigeben → Im Web veröffentlichen → CSV.
-//   Weg 2 (privat, empf.): Apps-Script-Web-App, die dieselben Spalten liefert.
-//   URL hier eintragen — leer lassen → eingebettete Beispieltabelle.
-//   Hinweis: Browser brauchen CORS — der zuverlässige Weg ist "Im Web
-//   veröffentlichen → CSV" (liefert eine .../pub?output=csv URL).
 window.DATA_SOURCE_URL = 'https://docs.google.com/spreadsheets/d/1qu5AvF6iWvPISBCpYUtiSjdTEqXlQrO0Qtm5-jTVZLE/export?format=csv&gid=0';
-
-// BILD_URL enthält nur Dateinamen → hier die Basis-URL eurer Bilder eintragen
-// (z. B. 'https://www.atlantis-berlin.de/images/produkte/'). Leer = Platzhalter.
 window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
 
 (function () {
-  // Standorte — der erste ist der "Heimat"-/Hauptbestand (Sommerfest vor Ort).
   const LOCATIONS = [
-    { key: 'coppi', label: 'Coppi', cols: ['BESTAND(Coppi)', 'BESTAND_Coppi', 'Coppi'], home: true },
-    { key: 'zentral', label: 'Zentrallager', cols: ['Zentrallager', 'Zentral'] },
-    { key: 'steglitz', label: 'Steglitz', cols: ['Steglitz'] },
-    { key: 'freiburg', label: 'Freiburg', cols: ['Freiburg'] },
-    { key: 'hamburg', label: 'Hamburg', cols: ['Hamburg'] },
+    { key: 'coppi',    label: 'Coppi',        cols: ['BESTAND(Coppi)', 'BESTAND_Coppi', 'Coppi'], home: true },
+    { key: 'zentral',  label: 'Zentrallager', cols: ['Zentrallager', 'Zentral'] },
+    { key: 'steglitz', label: 'Steglitz',     cols: ['Steglitz'] },
+    { key: 'freiburg', label: 'Freiburg',     cols: ['Freiburg'] },
+    { key: 'hamburg',  label: 'Hamburg',      cols: ['Hamburg'] },
   ];
   const HOME = LOCATIONS[0];
 
-  // ── robust CSV parser (quoted fields, commas, CRLF) ─────────────────────
   function parseCSV(text) {
     const rows = []; let row = [], field = '', i = 0, q = false;
     text = text.replace(/^\uFEFF/, '');
@@ -47,7 +35,6 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
   const num = (v) => { const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
   const getCol = (r, cols) => { for (const c of cols) if (r[c] != null && r[c] !== '') return r[c]; return ''; };
 
-  // ── name parsing: "Mares … Farbe: blau - Größe: S" ──────────────────────
   const ATTR_START = /(Farbe|Gr(?:ö|oe|o)(?:ß|ss|s)e)\s*:/i;
   function parseAttrs(name) {
     const size = (name.match(/Gr(?:ö|oe|o)(?:ß|ss|s)e\s*:\s*([^-–|]+)/i) || [])[1];
@@ -72,21 +59,12 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
     const txt = parts.find((p) => !/^\d+$/.test(p.trim())) || parts[parts.length - 1] || '';
     return txt.trim() || 'Artikel';
   }
-  // base article no.: master keeps its number; otherwise longest common prefix
-  function artBase(rows) {
-    const nums = rows.map((r) => r.ARTIKELNR).filter(Boolean);
-    if (nums.length <= 1) return nums[0] || '';
-    let p = nums[0];
-    for (const n of nums) while (p && !n.startsWith(p)) p = p.slice(0, -1);
-    return p.replace(/[-_]+$/, '') || nums[0];
-  }
 
   function locsOf(r) {
     const o = {}; LOCATIONS.forEach((L) => { o[L.key] = Math.round(num(getCol(r, L.cols))); }); return o;
   }
   const sumLocs = (list) => { const o = {}; LOCATIONS.forEach((L) => { o[L.key] = list.reduce((a, r) => a + (r[L.key] || 0), 0); }); return o; };
 
-  // ── group rows by base name (+ brand); resolve master/slave & variants ──
   function mapRows(records) {
     const groups = {};
     records.forEach((r) => {
@@ -104,7 +82,6 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const brand = cleanBrand(anchor.MARKE);
       const cat = cleanCat(anchor.KATEGORIE);
 
-      // which attributes vary across the scannable rows
       const attrRows = scannables.map((r) => ({ r, a: parseAttrs(nameOf(r)), loc: locsOf(r) }));
       const distinct = (k) => [...new Set(attrRows.map((x) => x.a[k]).filter(Boolean))];
       const varying = ['Farbe', 'Größe'].filter((k) => distinct(k).length > 1);
@@ -112,16 +89,17 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
 
       const isVariantProduct = scannables.length > 1 && varying.length > 0;
 
-      // product display name: base + constant attributes (e.g. "… · blau")
       let name = baseName(nameOf(anchor));
       constants.forEach((k) => { const v = distinct(k)[0]; if (v) name += ` · ${v}`; });
 
+      // ── variants: now includes art (ARTIKELNR) per variant ──
       const variants = isVariantProduct ? attrRows.map((x) => ({
-        v: varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
-        n: x.loc[HOME.key],          // Coppi (vor Ort)
+        v:     varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
+        n:     x.loc[HOME.key],
         total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
-        locs: x.loc,
-        ean: x.r.EAN,
+        locs:  x.loc,
+        ean:   x.r.EAN,
+        art:   x.r.ARTIKELNR || '',   // ← NEU: Art.-Nr. der Variante
       })) : [];
 
       const allLocRows = attrRows.map((x) => x.loc);
@@ -133,7 +111,6 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const price = num(anchor.PREIS);
       const onSale = uvp > 0 && price < uvp - 0.001;
 
-      // deaktivierte Artikel + 0-€-Posten ausblenden
       const deactivated = rows.some((r) => /deaktiviert/i.test(nameOf(r)) || /deaktiviert/i.test(r.KATEGORIE || ''));
       if (deactivated || !(price > 0)) return null;
 
@@ -154,16 +131,16 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
         cat,
         price: onSale ? uvp : price,
         sale: onSale ? price : null,
-        stock: totalsByLoc[HOME.key],   // Coppi = Hauptbestand → Ampel/KPI
+        stock: totalsByLoc[HOME.key],
         stockTotal,
         home: HOME.label,
         locations,
         variantLabel: isVariantProduct ? (varying.length === 1 ? varying[0] : 'Ausführung') : null,
-        variants: variants.map(({ v, n, total, locs }) => ({ v, n, total, locs })),
+        variants: variants.map(({ v, n, total, locs, ean, art }) => ({ v, n, total, locs, ean, art })),
         specs: [
           ['Hersteller', anchor.MARKE || brand || '—'],
-          ['Art.-Nr.', art || '—'],
-          ['Kategorie', cat],
+          ['Art.-Nr.',   art || '—'],
+          ['Kategorie',  cat],
         ],
         desc: '',
         note: null,
@@ -173,7 +150,6 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
     }).filter(Boolean);
   }
 
-  const SAMPLE = 'atlantis-filiale.csv';
   async function fetchCsv(src, timeoutMs) {
     const opts = { cache: 'no-store' };
     let timer;
@@ -195,18 +171,13 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
 
   async function load(url) {
     const live = url || window.DATA_SOURCE_URL;
-    if (live) {
-      try {
-        const products = await fetchCsv(live, 4000);
-        return { products, at: new Date(), live: true, src: live, fallback: false };
-      } catch (e) {
-        // Live-Quelle nicht erreichbar (privat / CORS / Timeout) → Beispieldaten
-        const products = await fetchCsv(SAMPLE);
-        return { products, at: new Date(), live: false, src: SAMPLE, fallback: true, error: String(e.message || e) };
-      }
+    if (!live) return { products: [], at: new Date(), live: false, fallback: false, error: 'Keine Datenquelle konfiguriert. Bitte DATA_SOURCE_URL in data-source.js eintragen.' };
+    try {
+      const products = await fetchCsv(live, 6000);
+      return { products, at: new Date(), live: true, src: live, fallback: false };
+    } catch (e) {
+      return { products: [], at: new Date(), live: false, src: live, fallback: false, error: 'Daten konnten nicht geladen werden: ' + String(e.message || e) };
     }
-    const products = await fetchCsv(SAMPLE);
-    return { products, at: new Date(), live: false, src: SAMPLE, fallback: false };
   }
 
   window.AtlantisData = { parseCSV, mapRows, load, LOCATIONS, HOME };
