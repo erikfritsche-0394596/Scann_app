@@ -196,6 +196,35 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return { ei, ai };
   }, [PRODUCTS]);
 
+  // productById: { id_lowercase: product } — für Master-Lookup via MASTER_ID
+  const productByArt = useMemo(() => {
+    const m = {};
+    (PRODUCTS || []).forEach((p) => {
+      (p.allArts || [p.art]).filter(Boolean).forEach((a) => {
+        m[String(a).trim().toLowerCase()] = p;
+      });
+    });
+    return m;
+  }, [PRODUCTS]);
+
+  // Sucht den Masterartikel für einen gescannten Art.-Nr.-Code über den Shop-Index.
+  // Gibt { product, variant } zurück — product = Master, variant = die gescannte Variante darin.
+  const findMasterViaShopIndex = (artKey) => {
+    if (!shopLoaded || !artKey) return null;
+    const entry = shopIndex[artKey.toLowerCase()];
+    if (!entry || !entry.masterId) return null;
+    // Master-Model aus masterIndex holen
+    const masterEntry = masterIndex[entry.masterId];
+    if (!masterEntry) return null;
+    const masterProduct = productByArt[masterEntry.model.toLowerCase()];
+    if (!masterProduct) return null;
+    // Die passende Variante im Masterprodukt finden (über Art.-Nr.)
+    const variant = (masterProduct.variants || []).find(
+      (vr) => vr.art && vr.art.trim().toLowerCase() === artKey.toLowerCase()
+    ) || null;
+    return { product: masterProduct, variant };
+  };
+
   const lookup = (code) => {
     const c = String(code).trim();
     const byEan = codeIndex.ei[c];
@@ -224,10 +253,24 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     if (result) {
       setNotFound(null);
       stopCamera();
+
+      // Scanned EAN für die Variante ermitteln
       const scannedEan = result.isEan
         ? result.code
         : (result.variant && result.variant.ean ? String(result.variant.ean).trim() : null);
-      open(result.product, scannedEan);
+
+      // Ist die gefundene Variante ein Slave? → Master über Shop-Index suchen
+      // Eine Variante ist ein Slave wenn ihr Art.-Nr. im shopIndex eine masterId hat
+      const varArt = result.variant ? result.variant.art : (result.isEan ? null : code.trim());
+      const masterResult = varArt ? findMasterViaShopIndex(varArt) : null;
+
+      if (masterResult) {
+        // Slave gescannt → Masterartikel öffnen, aber gescannte EAN merken
+        // damit die richtige Variante hervorgehoben wird
+        open(masterResult.product, scannedEan || (masterResult.variant && masterResult.variant.ean ? String(masterResult.variant.ean).trim() : null));
+      } else {
+        open(result.product, scannedEan);
+      }
     } else {
       setNotFound(String(code).trim());
       clearTimeout(nfTimer.current);
