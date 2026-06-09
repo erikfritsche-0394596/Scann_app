@@ -102,13 +102,19 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       let name = baseName(nameOf(anchor));
       constants.forEach((k) => { const v = distinct(k)[0]; if (v) name += ` · ${v}`; });
 
-      const variants = isVariantProduct ? attrRows.map((x) => ({
-        v: varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
-        n: x.loc[HOME.key],
-        total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
-        locs: x.loc,
-        ean: x.r.EAN,
-      })) : [];
+      const variants = isVariantProduct ? attrRows.map((x) => {
+        const vUvp = num(x.r.UVP); const vPrice = num(x.r.PREIS);
+        const vOnSale = vUvp > 0 && vPrice < vUvp - 0.001;
+        return {
+          v: varying.map((k) => x.a[k]).filter(Boolean).join(' · ') || (x.r.ARTIKELNR || '').split('-').pop(),
+          n: x.loc[HOME.key],
+          total: LOCATIONS.reduce((a, L) => a + x.loc[L.key], 0),
+          locs: x.loc,
+          ean: x.r.EAN,
+          price: vOnSale ? vUvp : vPrice,
+          sale:  vOnSale ? vPrice : null,
+        };
+      }) : [];
 
       const allLocRows = attrRows.map((x) => x.loc);
       const totalsByLoc = sumLocs(allLocRows);
