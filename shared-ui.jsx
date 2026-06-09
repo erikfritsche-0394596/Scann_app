@@ -133,7 +133,7 @@ const STOCK_COLOR_DARK = { ok: '#34d27b', low: '#ffc24b', out: '#ff5d6e' };
 window.ATLANTIS = {
   EUR: (v) => {
     const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/\./g, '').replace(',', '.'));
-    return Number.isFinite(n)
+    return Number.isFinite(n) && n > 0
       ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
       : '—';
   },
