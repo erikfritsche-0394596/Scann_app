@@ -78,7 +78,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const standortAccent = T.dark ? standort.accentDark : standort.accent;
 
   // ── Standort-abhängiger Bestand ──────────────────────────────────────────
-  // locs = { Coppi: 1, Zentrallager: 0, Steglitz: 2, Freiburg: 1, Hamburg: 2 }
   const getStock = (locs) => locs ? (locs[standort.key] ?? 0) : 0;
   const getTotalStock = (locs) => locs
     ? ALL_LOC_KEYS.reduce((s, k) => s + (locs[k] ?? 0), 0)
@@ -96,8 +95,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return p.stockTotal ?? p.stock ?? 0;
   };
 
-  // Shop-URL und Master-Art.-Nr. kommen jetzt direkt aus den Produktdaten (Spalte ATLOS_URL / MASTER_MODEL)
-  // Kein zweites Google Sheet mehr nötig.
   const getShopUrl = (product) => (product && product.shopUrl) || null;
   const getMasterArt = (product) => {
     if (!product || !product.isMaster) return null;
@@ -130,7 +127,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return { ei, ai };
   }, [PRODUCTS]);
 
-  // productById: { id_lowercase: product } — für Master-Lookup via MASTER_ID
   const productByArt = useMemo(() => {
     const m = {};
     (PRODUCTS || []).forEach((p) => {
@@ -141,11 +137,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return m;
   }, [PRODUCTS]);
 
-  // slavesByMasterArt: { masterArt_lowercase → [slave-products] }
-  // Alle Produkte ohne eigenen Master-Datensatz (isMaster=false) werden über ihre
-  // Art.-Nrn. dem Master zugeordnet, falls dessen Art.-Nr. als Präfix vorkommt.
-  // Einfacherer Ansatz: jedes Produkt kennt seine slaveArts (aus data-source.js);
-  // wir bauen den umgekehrten Index: slaveArt → masterProduct.
   const slaveToMasterIndex = useMemo(() => {
     const m = {};
     (PRODUCTS || []).forEach((p) => {
@@ -157,7 +148,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     return m;
   }, [PRODUCTS]);
 
-  // Alle Slave-Produkte die zu einem Master gehören (über Art.-Nr.-Lookup)
   const getSlavesForMaster = useCallback((masterProduct) => {
     if (!masterProduct || !masterProduct.isMaster) return [];
     const slaveArts = (masterProduct.slaveArts || []).map((a) => String(a).trim().toLowerCase());
@@ -166,10 +156,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       .filter(Boolean)
       .filter((p) => p.id !== masterProduct.id);
   }, [productByArt]);
-
-  // Master-Lookup über Produktdaten (MASTER_MODEL aus Bestandssheet)
-  // shopIndex wird nicht mehr benötigt — alles kommt aus dem Bestandssheet.
-  const findMasterViaShopIndex = (_artKey) => null; // deprecated, slaveToMasterIndex wird genutzt
 
   const lookup = (code) => {
     const c = String(code).trim();
@@ -204,30 +190,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
         ? result.code
         : (result.variant && result.variant.ean ? String(result.variant.ean).trim() : null);
 
-      // 1. Prüfe ob gescannter Artikel ein Slave ist (direkt aus Produktdaten)
-      const foundProduct = result.product;
-      const artKey = result.variant
-        ? String(result.variant.art || '').trim().toLowerCase()
-        : (!result.isEan ? String(code).trim().toLowerCase() : '');
-
-      // Slave-Check: Art.-Nr. des gefundenen Artikels im slaveToMasterIndex?
-      const masterFromProductData = artKey ? slaveToMasterIndex[artKey] : null;
-
-      // 2. Fallback: Shop-Index (wie bisher)
-      const masterFromShopIndex = !masterFromProductData && artKey
-        ? findMasterViaShopIndex(artKey)
-        : null;
-
-      if (masterFromProductData) {
-        // Slave gescannt → Masterartikel aus Produktdaten öffnen
-        open(masterFromProductData, scannedEan);
-      } else if (masterFromShopIndex) {
-        // Slave gescannt → Masterartikel über Shop-Index öffnen
-        open(masterFromShopIndex.product, scannedEan || (masterFromShopIndex.variant?.ean ? String(masterFromShopIndex.variant.ean).trim() : null));
-      } else {
-        // Master oder Einzelartikel gescannt → direkt öffnen
-        open(foundProduct, scannedEan);
-      }
+      // Slave oder Master oder Einzelartikel → immer direkt öffnen.
+      // Der zugehörige Master wird in der Detailansicht als Link angezeigt.
+      open(result.product, scannedEan);
     } else {
       setNotFound(String(code).trim());
       clearTimeout(nfTimer.current);
@@ -317,7 +282,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   );
 
   // ── shared atoms ─────────────────────────────────────────────
-  // Standort-Badge als Button oben rechts im Header
   const StandortBadge = () => (
     <button
       onClick={() => setShowStandortPicker(true)}
@@ -345,7 +309,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
         <div style={{ fontSize: F(26), fontWeight: 800, color: T.ink, letterSpacing: -0.3, lineHeight: 1.1 }}>{title}</div>
         {sub && <div style={{ fontSize: F(13), color: T.mute, marginTop: 3 }}>{sub}</div>}
       </div>
-      {/* Standort-Badge immer sichtbar, rechts vom optionalen right-Slot */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 2 }}>
         {right}
         <StandortBadge />
@@ -552,21 +515,17 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
     const locMax = Math.max(1, ...displayLocs.map((l) => l.n));
 
-    // ── NEU: Master-Art.-Nr. und Shop-URL ──────────────────────
-    const masterArt = getMasterArt(detail);
+    const isMasterDetail = !!detail.isMaster;
     const currentArt = scannedVariant && scannedVariant.art ? scannedVariant.art : detail.art;
 
-    // Shop-URLs direkt aus Produktdaten (Spalte ATLOS_URL)
-    // Slave: eigene shopUrl für den Button, masterProduct.shopUrl für den Master-Link
-    const shopUrl = !isMasterDetail && masterProduct ? getShopUrl(masterProduct) : getShopUrl(detail);
-    const slaveShopUrl = !isMasterDetail ? getShopUrl(detail) : null;
-    const shopBtnUrl = slaveShopUrl || shopUrl;
+    // Master-Lookup für Slave-Ansicht
+    const masterProduct = !isMasterDetail
+      ? slaveToMasterIndex[String(currentArt || '').trim().toLowerCase()]
+      : null;
+    const masterShopUrl = masterProduct ? getShopUrl(masterProduct) : null;
 
-    // ── Slave-Artikel: alle Artikel die zu diesem Master gehören ──
-    const isMasterDetail = !!detail.isMaster;
+    // Slave-Produkte für Master-Ansicht
     const slaveProducts = isMasterDetail ? getSlavesForMaster(detail) : [];
-
-    // Master mit Slaves und ohne Preis → Gesamtbestand anzeigen
     const isMasterWithSlaves = isMasterDetail && slaveProducts.length > 0 && !(detail.price > 0);
     const slavesTotalCoppi = isMasterWithSlaves
       ? slaveProducts.reduce((s, p) => s + getProductStock(p), 0)
@@ -575,13 +534,11 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       ? slaveProducts.reduce((s, p) => s + getProductTotalStock(p), 0)
       : 0;
 
-    // masterShopUrl: Link zum Masterartikel (für Slave-Ansicht)
-    // shopUrl zeigt beim Slave auf den Slave, masterShopUrl auf den Master
-    const masterProduct = !isMasterDetail ? slaveToMasterIndex[String(currentArt || '').trim().toLowerCase()] : null;
-    const masterShopUrl = masterProduct ? getShopUrl(masterProduct) : null;
+    // Shop-URL: eigene URL des Artikels; für Slave-Ansicht Fallback auf Master-URL
+    const ownShopUrl = getShopUrl(detail);
+    const shopBtnUrl = ownShopUrl || (!isMasterDetail ? masterShopUrl : null);
 
-    // Slave-Accordion: alle Geschwister gruppiert nach Farbe/Gruppe (für Slave-Ansicht)
-    // Wir bauen virtuelle variants aus slaveProducts für den VariantAccordion
+    // Sibling-Varianten für Slave (alle Geschwister zum selben Master)
     const siblingVariants = !isMasterDetail && masterProduct
       ? getSlavesForMaster(masterProduct).map((sp) => ({
           v:     sp.name.replace(masterProduct.name, '').replace(/^[\s·\-–]+/, '').trim() || sp.art,
@@ -624,7 +581,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               {detail.name}{scannedVariant ? ` · ${scannedVariant.v}` : ''}
             </div>
           </div>
-          {/* Standort-Badge auch in Detail-Header */}
           <div style={{ width: 10, height: 10, borderRadius: '50%', background: standortAccent, flexShrink: 0 }} />
         </div>
 
@@ -711,7 +667,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           )}
 
-          {/* Ausführungen-Accordion: für Master aus slaveProducts, für Slave aus siblings, für normale Artikel aus variants */}
+          {/* Ausführungen-Accordion */}
           {isMasterWithSlaves && masterVariants && masterVariants.length > 0 && (
             <VariantAccordion detail={{ ...detail, variants: masterVariants, variantLabel: 'Ausführung', _scannedEan: null }} T={T} F={F} stockState={stockState} />
           )}
@@ -721,7 +677,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           {!isMasterWithSlaves && isMasterDetail && detail.variants && detail.variants.length > 0 && (
             <VariantAccordion detail={detail} T={T} F={F} stockState={stockState} />
           )}
-          {/* Normale Artikel ohne Master-Kontext */}
           {!isMasterDetail && !siblingVariants && detail.variants && detail.variants.length > 0 && (
             <VariantAccordion detail={detail} T={T} F={F} stockState={stockState} />
           )}
@@ -743,36 +698,47 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
                 <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, textAlign: 'right', fontFamily: mono ? 'ui-monospace, Menlo, monospace' : 'inherit' }}>{v}</span>
               </div>
             ))}
-            {/* Master-Link: nur für Slave-Artikel, öffnet Master im Onlineshop */}
-            {!isMasterDetail && masterProduct && masterShopUrl && (
-              <a
-                href={masterShopUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  gap: 16, padding: `${T.pad - 4}px ${T.pad}px`,
-                  borderTop: `1px solid ${T.border}`,
-                  textDecoration: 'none', cursor: 'pointer',
-                  background: T.dark ? `${standortAccent}0d` : `${standortAccent}07`,
-                }}
-              >
-                <span style={{ color: T.mute, fontSize: F(13) }}>Master-Artikel</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: standortAccent, fontSize: F(13), fontWeight: 700, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                  {masterProduct.art}
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                </span>
-              </a>
+
+            {/* Master-Artikel: immer anzeigen wenn Slave-Artikel, mit Shop-Link wenn verfügbar */}
+            {!isMasterDetail && masterProduct && (
+              masterShopUrl ? (
+                <a
+                  href={masterShopUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    gap: 16, padding: `${T.pad - 4}px ${T.pad}px`,
+                    borderTop: `1px solid ${T.border}`,
+                    textDecoration: 'none', cursor: 'pointer',
+                    background: T.dark ? `${standortAccent}0d` : `${standortAccent}07`,
+                  }}
+                >
+                  <span style={{ color: T.mute, fontSize: F(13) }}>Masterartikel im Shop</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: standortAccent, fontSize: F(13), fontWeight: 700, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+                    {masterProduct.art}
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </span>
+                </a>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, padding: `${T.pad - 4}px ${T.pad}px`, borderTop: `1px solid ${T.border}` }}>
+                  <span style={{ color: T.mute, fontSize: F(13) }}>Masterartikel</span>
+                  <span style={{ color: T.ink, fontSize: F(13), fontWeight: 600, fontFamily: 'ui-monospace, Menlo, monospace' }}>{masterProduct.art}</span>
+                </div>
+              )
             )}
           </div>
 
           {/* Art.-Nr. + EAN Footer */}
-          <div style={{ marginTop: 10, marginBottom: shopUrl ? 4 : 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
+          <div style={{ marginTop: 10, marginBottom: shopBtnUrl ? 4 : 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
             <span>Art. {currentArt}</span>
             <span>EAN {detail._scannedEan || detail.ean}</span>
           </div>
 
-          {/* Onlineshop-Button: Slave → Slave-URL, Master/Einzelartikel → Master-URL */}
+          {/* Onlineshop-Button */}
           {shopBtnUrl && (
             <a
               href={shopBtnUrl}
@@ -791,7 +757,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              {!isMasterDetail && slaveShopUrl ? 'Artikel im Onlineshop anzeigen' : 'Im Onlineshop anzeigen'}
+              Im Onlineshop anzeigen
             </a>
           )}
           {!shopBtnUrl && (
@@ -951,7 +917,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     );
   };
 
-  // ── Accent-Strip oben am Tab-Bar (farbige Linie zeigt aktiven Standort) ──
   const AccentStrip = () => (
     <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: standortAccent, borderRadius: '3px 3px 0 0' }} />
   );
@@ -974,7 +939,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       <div style={{ position: 'absolute', inset: 0, zIndex: 20, transform: detail ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .3s cubic-bezier(.22,1,.36,1)', pointerEvents: detail ? 'auto' : 'none' }}>
         {detailScreen}
       </div>
-      {/* Standort-Picker Modal */}
       {showStandortPicker && <StandortPicker />}
     </div>
   );
