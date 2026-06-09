@@ -61,19 +61,33 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     setHistory((h) => [{ p, at: Date.now() }, ...h.filter((x) => x.p.ean !== p.ean)].slice(0, 20));
   };
 
-  // ── real barcode scanning (html5-qrcode) + EAN lookup ────────
+  // ── real barcode scanning (html5-qrcode) + EAN/Art.-Nr. lookup ──
   const CAM = typeof Html5Qrcode !== 'undefined' && typeof navigator !== 'undefined' && !!navigator.mediaDevices;
+
   const codeIndex = useMemo(() => {
-    const m = {};
+    const ei = {}, ai = {};
     (PRODUCTS || []).forEach((p) => {
-      (p.allEans && p.allEans.length ? p.allEans : [p.ean]).forEach((e) => { if (e) m[String(e).trim()] = p; });
-      (p.allArts || [p.art]).forEach((a) => { if (a) m[String(a).trim().toLowerCase()] = p; });
+      (p.allEans && p.allEans.length ? p.allEans : [p.ean]).forEach((e) => {
+        if (e) ei[String(e).trim()] = { product: p, variant: null };
+      });
+      (p.allArts || [p.art]).forEach((a) => {
+        if (a) ai[String(a).trim().toLowerCase()] = { product: p, variant: null };
+      });
+      (p.variants || []).forEach((vr) => {
+        if (vr.ean) ei[String(vr.ean).trim()] = { product: p, variant: vr };
+        if (vr.art) ai[String(vr.art).trim().toLowerCase()] = { product: p, variant: vr };
+      });
     });
-    return m;
+    return { ei, ai };
   }, [PRODUCTS]);
+
   const lookup = (code) => {
     const c = String(code).trim();
-    return codeIndex[c] || codeIndex[c.toLowerCase()] || null;
+    const byEan = codeIndex.ei[c];
+    if (byEan) return { ...byEan, isEan: true, code: c };
+    const byArt = codeIndex.ai[c.toLowerCase()];
+    if (byArt) return { ...byArt, isEan: false, code: c };
+    return null;
   };
 
   const camRef = useRef(null);
