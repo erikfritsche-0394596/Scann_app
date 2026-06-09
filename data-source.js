@@ -115,8 +115,6 @@ window.IMAGE_BASE_URL = 'https://www.atlantiscloud.de/images/products/gross/';
       const price = num(anchor.PREIS);
       const onSale = uvp > 0 && price < uvp - 0.001;
 
-      if (!(price > 0)) return null;
-
       // Status & Restposten aus den neuen Spalten
       const statusVal = (anchor.Status || scannables[0]?.Status || '').trim();
       const restpostenVal = (anchor.Restposten || scannables[0]?.Restposten || '').trim().toUpperCase();
