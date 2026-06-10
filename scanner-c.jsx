@@ -772,8 +772,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   // Hilfsfunktion: zum Suche-Tab springen und Aktionsfilter setzen
   const goToAktionen = () => {
-    setFilterBrand(null); setFilterCat(null); setFilterAktion(true);
-    setQ(''); setDetail(null); setTab('search');
+    setFilterBrand(null); setFilterCat(null); setFilterAktion(true); setQ('');
+    setDetail(null);
+    setTimeout(() => setTab('search'), 50);
   };
 
   // Deaktivierte Artikel (Kategorie enthält "Deaktivierte Artikel") grundsätzlich ausblenden
