@@ -259,6 +259,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <span style={{ fontSize: F(12), color: T.mute }}>{stock} Stk</span>
             {p.inactive   && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
             {p.restposten && <span style={{ fontSize: F(10), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '1px 5px', borderRadius: 4 }}>Restposten</span>}
+            {p.aktionsangebot && <span style={{ fontSize: F(10), fontWeight: 700, color: '#3d2b00', background: 'linear-gradient(90deg, #daa520, #ffd700, #daa520)', padding: '1px 7px', borderRadius: 4 }}>🏷 Aktion</span>}
           </div>
         </div>
         {Icon.chevron(T.mute, 20)}
@@ -515,6 +516,24 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </div>
           </div>
 
+          {/* Aktionsbanner */}
+          {detail.aktionsangebot && (
+            <div style={{
+              marginTop: T.gap, borderRadius: T.radius, padding: '10px 14px',
+              background: 'linear-gradient(135deg, #b8860b 0%, #daa520 40%, #ffd700 60%, #daa520 80%, #b8860b 100%)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#3d2b00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="7" y1="7" x2="7.01" y2="7" stroke="#3d2b00" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: F(10), fontWeight: 700, color: '#5a3e00', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Aktionsangebot</div>
+                <div style={{ fontSize: F(13), fontWeight: 600, color: '#3d2b00', lineHeight: 1.3 }}>{detail.aktionsangebot}</div>
+              </div>
+            </div>
+          )}
+
           {/* KPI tiles: Preis + Bestand */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
             <Tile>
@@ -541,8 +560,8 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             </Tile>
           </div>
 
-          {/* Bestand nach Standort */}
-          {detail.locs && (
+          {/* Bestand nach Standort — nur für Einzelartikel ohne Geschwister */}
+          {detail.locs && siblings.length === 0 && (
             <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
               <TileLabel icon={Icon.box}>Bestand nach Standort</TileLabel>
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -611,34 +630,32 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           </div>
 
           {/* Art.-Nr. + EAN */}
-          <div style={{ marginTop: 10, marginBottom: shopBtnUrl ? 4 : 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
+          <div style={{ marginTop: 10, marginBottom: 6, display: 'flex', justifyContent: 'space-between', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: F(11), color: T.mute }}>
             <span>Art. {detail.art}</span>
             <span>EAN {detail.ean}</span>
           </div>
-
-          {/* Onlineshop-Button */}
-          {shopBtnUrl && (
-            <a href={shopBtnUrl} target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                width: '100%', padding: `${F(12)}px 0`, marginBottom: T.gap,
-                borderRadius: T.radius, border: `1.5px solid ${standortAccent}55`,
-                background: `${standortAccent}0e`, color: standortAccent,
-                fontSize: F(14), fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Im Onlineshop anzeigen
-            </a>
-          )}
           {!shopBtnUrl && (
             <div style={{ textAlign: 'center', fontSize: F(11), color: T.mute, marginBottom: T.gap }}>Kein Onlineshop-Eintrag gefunden</div>
           )}
         </div>
 
-        <div style={{ paddingTop: 11, paddingLeft: T.pad, paddingRight: T.pad, paddingBottom: padBotBtn, background: T.bg, borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
+        {/* Button-Leiste: Onlineshop + Nächsten Artikel scannen nebeneinander */}
+        <div style={{ paddingTop: 11, paddingLeft: T.pad, paddingRight: T.pad, paddingBottom: padBotBtn, background: T.bg, borderTop: `1px solid ${T.border}`, flexShrink: 0, display: 'flex', gap: 10 }}>
+          {shopBtnUrl && (
+            <a href={shopBtnUrl} target="_blank" rel="noopener noreferrer"
+              style={{ flex: 1, height: 50, borderRadius: 14, border: `1.5px solid ${standortAccent}55`,
+                background: `${standortAccent}0e`, color: standortAccent,
+                fontSize: F(14), fontWeight: 800, textDecoration: 'none', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M15 3h6v6M10 14L21 3" stroke={standortAccent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Onlineshop
+            </a>
+          )}
           <button onClick={() => { setDetail(null); setTab('scan'); }}
-            style={{ width: '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', background: standortAccent,
+            style={{ flex: shopBtnUrl ? 1 : undefined, width: shopBtnUrl ? undefined : '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', background: standortAccent,
               color: T.dark ? '#06131f' : '#fff', fontSize: F(16), fontWeight: 800,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}>
             {Icon.scan(T.dark ? '#06131f' : '#fff', 20)} Nächsten Artikel scannen
