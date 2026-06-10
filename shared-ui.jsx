@@ -1,4 +1,4 @@
-// Atlantis Sommerfest Scanner — shared UI atoms (logo, placeholder, icons) 
+// Atlantis Sommerfest Scanner — shared UI atoms (logo, placeholder, icons)
 /* global React */
 
 // ── Atlantis wordmark + horizon arc ───────────────────────────
