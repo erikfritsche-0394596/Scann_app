@@ -267,14 +267,177 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   };
 
   // ── Geschwister-Accordion ─────────────────────────────────────
-  // Zeigt alle Slaves desselben Masters als aufklappbare Liste
+  // Gruppiert nach Farbe, sortiert innerhalb der Gruppe nach Größe.
+  // Unterstützt beide Namensformate:
+  //   "Basis - Farbe - Gr. XY"  (Bindestrich-Format)
+  //   "Basis - Farbe: Wert - Größe: Wert"  (Doppelpunkt-Format)
   function SiblingsAccordion({ siblings, currentEan, T, F }) {
     if (!siblings || siblings.length === 0) return null;
     const stockColor = (n) => n <= 0 ? T.stock.out : n <= 2 ? T.stock.low : T.stock.ok;
+
+    // Farbe und Größe aus dem Produktnamen extrahieren
+    const parseAttrs = (name) => {
+      // Doppelpunkt-Format: "Farbe: Orange-Black/Grey" / "Größe: S"
+      const colorColon = (name.match(/Farbe\s*:\s*([^-–·]+?)(?:\s*[-–·]|$)/i) || [])[1];
+      const sizeColon  = (name.match(/Gr(?:ö|oe|o)(?:ß|ss|s)e\s*:\s*([^-–·]+?)(?:\s*[-–·]|$)/i) || [])[1];
+      if (colorColon || sizeColon) {
+        return { color: (colorColon || '').trim() || null, size: (sizeColon || '').trim() || null };
+      }
+      // Bindestrich-Format: letztes Segment nach " - Gr. " ist die Größe,
+      // vorletztes Segment ist die Farbe
+      const parts = name.split(/\s+-\s+/);
+      if (parts.length >= 2) {
+        const last = parts[parts.length - 1].trim();
+        const prev = parts[parts.length - 2].trim();
+        const sizeMatch = last.match(/^Gr\.?\s*(.+)/i);
+        if (sizeMatch) return { color: prev, size: sizeMatch[1].trim() };
+        // Kein "Gr." — letztes Segment könnte Größe sein (z.B. "S", "M", "L", "39/40")
+        if (/^(XS|S|M|L|XL|XXL|\d[\d/,.\-–]+)$/i.test(last)) {
+          return { color: prev, size: last };
+        }
+        // Nur eine Variante (z.B. nur Farbe, keine Größe)
+        return { color: last, size: null };
+      }
+      return { color: null, size: null };
+    };
+
+    // Größen numerisch sortieren: "39/40" → 39, "S/M" → Buchstaben ans Ende
+    const sizeOrder = (s) => {
+      if (!s) return 9999;
+      const sizeMap = { XS: 1, S: 2, M: 3, L: 4, XL: 5, XXL: 6, XXXL: 7 };
+      const upper = s.toUpperCase().trim();
+      if (sizeMap[upper]) return sizeMap[upper];
+      const n = parseFloat(String(s).replace(',', '.'));
+      return Number.isFinite(n) ? n : 9998;
+    };
+
+    // Gruppieren nach Farbe, innerhalb nach Größe sortieren
+    const grouped = React.useMemo(() => {
+      const map = {};
+      siblings.forEach((sp) => {
+        const { color, size } = parseAttrs(sp.name);
+        const key = color || '—';
+        if (!map[key]) map[key] = [];
+        map[key].push({ sp, size });
+      });
+      // Innerhalb jeder Farbe nach Größe sortieren
+      Object.values(map).forEach((items) => {
+        items.sort((a, b) => sizeOrder(a.size) - sizeOrder(b.size));
+      });
+      return map;
+    }, [siblings]);
+
+    const groupKeys   = Object.keys(grouped);
+    const multiGroup  = groupKeys.length > 1;
+
+    // Finde die Farb-Gruppe des aktuell gescannten Artikels
+    const currentGroup = React.useMemo(() => {
+      if (!currentEan) return null;
+      return groupKeys.find((gk) => grouped[gk].some((x) => x.sp.ean === currentEan)) || null;
+    }, [currentEan, grouped, groupKeys]);
+
+    const [openGroups, setOpenGroups] = React.useState(() => {
+      const init = {};
+      if (currentGroup) init[currentGroup] = true;
+      else if (groupKeys.length === 1) init[groupKeys[0]] = true;
+      return init;
+    });
     const [openEans, setOpenEans] = React.useState(() =>
       currentEan ? { [currentEan]: true } : {}
     );
-    const toggle = (ean) => setOpenEans((o) => ({ ...o, [ean]: !o[ean] }));
+    const toggleGroup = (key) => setOpenGroups((o) => ({ ...o, [key]: !o[key] }));
+    const toggleEan   = (ean) => setOpenEans((o) => ({ ...o, [ean]: !o[ean] }));
+
+    // Bestandssumme für eine Farbgruppe
+    const groupStock = (items) => items.reduce((sum, { sp }) =>
+      sum + (sp.locs ? (sp.locs[standort.key] ?? 0) : (sp.stock ?? 0)), 0);
+    const groupTotal = (items) => items.reduce((sum, { sp }) =>
+      sum + (sp.locs ? ALL_LOC_KEYS.reduce((s, k) => s + (sp.locs[k] ?? 0), 0) : (sp.stockTotal ?? 0)), 0);
+
+    const SizeRow = ({ sp, size }) => {
+      const isCurrent = sp.ean === currentEan;
+      const stock     = sp.locs ? (sp.locs[standort.key] ?? 0) : (sp.stock ?? 0);
+      const total     = sp.locs ? ALL_LOC_KEYS.reduce((s, k) => s + (sp.locs[k] ?? 0), 0) : (sp.stockTotal ?? 0);
+      const isOpen    = openEans[sp.ean];
+      const hasLocs   = !!sp.locs;
+      const onSale    = sp.sale != null && sp.sale > sp.price;
+      const locMax    = hasLocs ? Math.max(1, ...ALL_LOC_KEYS.map((k) => sp.locs[k] ?? 0)) : 1;
+      const label     = size || sp.name;
+
+      return (
+        <div>
+          <button onClick={() => hasLocs && toggleEan(sp.ean)}
+            style={{ width: '100%', textAlign: 'left', border: 'none', fontFamily: 'inherit',
+              cursor: hasLocs ? 'pointer' : 'default', padding: `${F(9)}px ${F(14)}px`,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+              background: isCurrent ? (T.dark ? `${standortAccent}1a` : `${standortAccent}0d`) : 'transparent',
+              borderLeft: isCurrent ? `3px solid ${standortAccent}` : '3px solid transparent',
+              borderTop: `1px solid ${T.border}` }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {isCurrent && <span style={{ fontSize: F(9), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, border: `1px solid ${standortAccent}44`, padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4, marginRight: 6 }}>gescannt</span>}
+              <span style={{ fontSize: F(13), fontWeight: isCurrent ? 700 : 500, color: T.ink }}>{label}</span>
+              {sp.art && <span style={{ display: 'block', fontSize: F(10), color: T.mute, fontFamily: 'ui-monospace, Menlo, monospace', marginTop: 1 }}>{sp.art}</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {sp.price > 0 && <span style={{ fontSize: F(12), fontWeight: 700, color: onSale ? T.red : standortAccent, whiteSpace: 'nowrap' }}>{EUR(sp.price)}</span>}
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: F(14), fontWeight: 700, color: stockColor(stock), lineHeight: 1 }}>{stock} <span style={{ fontSize: F(10), fontWeight: 500, color: T.mute }}>{standort.shortLabel}</span></div>
+                {total !== stock && <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>{total} ges.</div>}
+              </div>
+              {hasLocs && <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', opacity: 0.5 }}><path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+          </button>
+          {isOpen && hasLocs && (
+            <div style={{ background: T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc', borderTop: `1px solid ${T.border}`, padding: `${F(7)}px ${F(14)}px ${F(7)}px ${F(28)}px` }}>
+              {ALL_LOC_KEYS.map((locKey) => {
+                const sd   = STANDORTE.find((s) => s.key === locKey) || { key: locKey, label: locKey };
+                const n    = sp.locs[locKey] ?? 0;
+                const pct  = Math.round((n / locMax) * 100);
+                const home = locKey === standort.key;
+                return (
+                  <div key={locKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ width: F(74), flexShrink: 0, fontSize: F(11), fontWeight: home ? 700 : 400, color: home ? standortAccent : T.mute }}>
+                      {sd.label}
+                      {home && <span style={{ marginLeft: 4, fontSize: F(8), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>hier</span>}
+                    </span>
+                    <div style={{ flex: 1, height: 5, borderRadius: 5, background: T.dark ? 'rgba(255,255,255,0.08)' : '#dde4ee', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: n === 0 ? 'transparent' : home ? standortAccent : (T.dark ? 'rgba(231,239,247,0.35)' : '#9fb0c6') }} />
+                    </div>
+                    <span style={{ width: F(22), textAlign: 'right', fontSize: F(12), fontWeight: 700, color: n ? T.ink : T.mute }}>{n}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const GroupHeader = ({ gk }) => {
+      const items      = grouped[gk];
+      const isOpen     = openGroups[gk];
+      const isCurrent  = gk === currentGroup;
+      const stk        = groupStock(items);
+      const tot        = groupTotal(items);
+      return (
+        <button onClick={() => toggleGroup(gk)}
+          style={{ width: '100%', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', border: 'none',
+            padding: `${F(10)}px ${F(14)}px`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            background: isCurrent ? (T.dark ? `${standortAccent}1a` : `${standortAccent}0f`) : (T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc'),
+            borderTop: `1px solid ${T.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {isCurrent && <svg width={13} height={13} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M3 8V5a2 2 0 012-2h3M16 3h3a2 2 0 012 2v3M21 16v3a2 2 0 01-2 2h-3M8 21H5a2 2 0 01-2-2v-3M3 12h18" stroke={standortAccent} strokeWidth="2" strokeLinecap="round"/></svg>}
+            <span style={{ fontSize: F(13), fontWeight: 700, color: isCurrent ? standortAccent : T.ink }}>{gk}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: F(11), color: T.mute }}>
+              <span style={{ color: stockColor(stk), fontWeight: 700 }}>{stk}</span> vor Ort · {tot} ges.
+            </span>
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', opacity: 0.5 }}><path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+        </button>
+      );
+    };
 
     return (
       <div style={{ background: T.card, borderRadius: T.radius, marginTop: T.gap, border: `1px solid ${T.border}`, boxShadow: T.tileShadow, overflow: 'hidden' }}>
@@ -282,63 +445,13 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" stroke={T.mute} strokeWidth="2" strokeLinejoin="round"/><path d="M3 7l9 4 9-4M12 11v10" stroke={T.mute} strokeWidth="2" strokeLinejoin="round"/></svg>
           Alle Ausführungen
         </div>
-        {siblings.map((sp) => {
-          const isCurrent = sp.ean === currentEan;
-          const stock     = sp.locs ? (sp.locs[standort.key] ?? 0) : (sp.stock ?? 0);
-          const total     = sp.locs ? ALL_LOC_KEYS.reduce((s, k) => s + (sp.locs[k] ?? 0), 0) : (sp.stockTotal ?? 0);
-          const isOpen    = openEans[sp.ean];
-          const hasLocs   = sp.locs && ALL_LOC_KEYS.some((k) => (sp.locs[k] ?? 0) > 0 || sp.locs[k] !== undefined);
-          const onSale    = sp.sale != null && sp.sale > sp.price;
-          const locMax    = hasLocs ? Math.max(1, ...ALL_LOC_KEYS.map((k) => sp.locs[k] ?? 0)) : 1;
-
-          return (
-            <div key={sp.ean || sp.art}>
-              <button onClick={() => hasLocs && toggle(sp.ean)}
-                style={{ width: '100%', textAlign: 'left', border: 'none', fontFamily: 'inherit',
-                  cursor: hasLocs ? 'pointer' : 'default', padding: `${F(9)}px ${F(14)}px`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                  background: isCurrent ? (T.dark ? `${standortAccent}1a` : `${standortAccent}0d`) : 'transparent',
-                  borderLeft: isCurrent ? `3px solid ${standortAccent}` : '3px solid transparent',
-                  borderTop: `1px solid ${T.border}` }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {isCurrent && <span style={{ fontSize: F(9), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, border: `1px solid ${standortAccent}44`, padding: '1px 5px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4, marginRight: 6 }}>gescannt</span>}
-                  <span style={{ fontSize: F(13), fontWeight: isCurrent ? 700 : 500, color: T.ink }}>{sp.name}</span>
-                  {sp.art && <span style={{ display: 'block', fontSize: F(10), color: T.mute, fontFamily: 'ui-monospace, Menlo, monospace', marginTop: 1 }}>{sp.art}</span>}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  {sp.price > 0 && <span style={{ fontSize: F(12), fontWeight: 700, color: onSale ? T.red : standortAccent, whiteSpace: 'nowrap' }}>{EUR(sp.price)}</span>}
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: F(14), fontWeight: 700, color: stockColor(stock), lineHeight: 1 }}>{stock} <span style={{ fontSize: F(10), fontWeight: 500, color: T.mute }}>{standort.shortLabel}</span></div>
-                    {total !== stock && <div style={{ fontSize: F(10), color: T.mute, marginTop: 1 }}>{total} ges.</div>}
-                  </div>
-                  {hasLocs && <svg width={14} height={14} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s', opacity: 0.5 }}><path d="M6 9l6 6 6-6" stroke={T.ink} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                </div>
-              </button>
-              {isOpen && hasLocs && (
-                <div style={{ background: T.dark ? 'rgba(255,255,255,0.03)' : '#f7f9fc', borderTop: `1px solid ${T.border}`, padding: `${F(7)}px ${F(14)}px ${F(7)}px ${F(28)}px` }}>
-                  {ALL_LOC_KEYS.map((locKey) => {
-                    const sd  = STANDORTE.find((s) => s.key === locKey) || { key: locKey, label: locKey };
-                    const n   = sp.locs[locKey] ?? 0;
-                    const pct = Math.round((n / locMax) * 100);
-                    const home = locKey === standort.key;
-                    return (
-                      <div key={locKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ width: F(74), flexShrink: 0, fontSize: F(11), fontWeight: home ? 700 : 400, color: home ? standortAccent : T.mute }}>
-                          {sd.label}
-                          {home && <span style={{ marginLeft: 4, fontSize: F(8), fontWeight: 700, color: standortAccent, background: `${standortAccent}18`, padding: '1px 4px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: 0.4 }}>hier</span>}
-                        </span>
-                        <div style={{ flex: 1, height: 5, borderRadius: 5, background: T.dark ? 'rgba(255,255,255,0.08)' : '#dde4ee', overflow: 'hidden' }}>
-                          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: n === 0 ? 'transparent' : home ? standortAccent : (T.dark ? 'rgba(231,239,247,0.35)' : '#9fb0c6') }} />
-                        </div>
-                        <span style={{ width: F(22), textAlign: 'right', fontSize: F(12), fontWeight: 700, color: n ? T.ink : T.mute }}>{n}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {!multiGroup && grouped[groupKeys[0]].map(({ sp, size }) => <SizeRow key={sp.ean || sp.art} sp={sp} size={size} />)}
+        {multiGroup && groupKeys.map((gk) => (
+          <div key={gk}>
+            <GroupHeader gk={gk} />
+            {openGroups[gk] && grouped[gk].map(({ sp, size }) => <SizeRow key={sp.ean || sp.art} sp={sp} size={size} />)}
+          </div>
+        ))}
       </div>
     );
   }
@@ -597,16 +710,48 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   // ── Suche-Tab ─────────────────────────────────────────────────
   const q2 = q.trim().toLowerCase();
   const tokenMatch = (s, toks) => toks.every((t) => s.includes(t));
-  const allBrands = useMemo(() => [...new Set(PRODUCTS.filter((p) => !p.isMaster).map((p) => p.brand).filter(Boolean))].sort(), [PRODUCTS]);
-  const allCats   = useMemo(() => [...new Set(PRODUCTS.filter((p) => !p.isMaster).map((p) => p.cat).filter(Boolean))].sort(),   [PRODUCTS]);
+
+  // Top-10-Marken und -Kategorien aus echten Daten (gezählt aus dem Sheet).
+  // Reihenfolge = Häufigkeit. Gekürzte Anzeigenamen für die Chips.
+  // Deaktivierte Artikel werden grundsätzlich herausgefiltert.
+  const TOP_BRANDS = [
+    { value: 'Mares',                              label: 'Mares' },
+    { value: 'ScubaPro',                           label: 'ScubaPro' },
+    { value: 'Waterproof Diving International AB', label: 'Waterproof' },
+    { value: 'Aqualung',                           label: 'Aqualung' },
+    { value: 'Divevolk',                           label: 'Divevolk' },
+    { value: 'Tusa',                               label: 'Tusa' },
+    { value: 'Cressi Sub',                         label: 'Cressi' },
+    { value: 'Polaris',                            label: 'Polaris' },
+    { value: 'Scuba Force',                        label: 'Scuba Force' },
+    { value: 'Bare Sports Holding Malta',          label: 'Bare' },
+  ];
+
+  const TOP_CATS = [
+    { value: 'Neoprenanzüge',                    label: 'Neoprenanzüge' },
+    { value: 'Neopren',                          label: 'Neopren' },
+    { value: 'Trockentauchen',                   label: 'Trockentauchen' },
+    { value: 'Zubehör',                          label: 'Zubehör' },
+    { value: 'Geräteflossen',                    label: 'Geräteflossen' },
+    { value: 'Tarierjackets',                    label: 'Tarierjackets' },
+    { value: 'Masken',                           label: 'Masken' },
+    { value: 'Masken mit opt. Gläsern',          label: 'Opt. Masken' },
+    { value: 'UV-Schutz',                        label: 'UV-Schutz' },
+    { value: 'Trilaminat Trockentauchanzüge',    label: 'Trilaminat' },
+  ];
+
   const [filterBrand, setFilterBrand] = useState(null);
   const [filterCat,   setFilterCat]   = useState(null);
   const toks = q2.length >= 2 ? q2.split(/\s+/).filter(Boolean) : [];
   const SEARCH_CAP = 40;
 
+  // Deaktivierte Artikel (Kategorie enthält "Deaktivierte Artikel") grundsätzlich ausblenden
+  const isDeactivated = (p) => (p.cat || '').includes('Deaktivierte Artikel');
+
   const matches = useMemo(() => {
     return PRODUCTS.filter((p) => {
-      if (p.isMaster) return false; // Master-Artikel nicht in Suchergebnissen
+      if (p.isMaster) return false;
+      if (isDeactivated(p)) return false;
       const s = p._s || (p.name + ' ' + p.brand + ' ' + p.art + ' ' + p.cat + ' ' + p.ean).toLowerCase();
       const textOk  = toks.length === 0 || tokenMatch(s, toks);
       const brandOk = !filterBrand || p.brand === filterBrand;
@@ -618,6 +763,14 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const shown = matches.slice(0, SEARCH_CAP);
   const activeFilters = (filterBrand ? 1 : 0) + (filterCat ? 1 : 0);
 
+  // Aktiven Chip-Label für die Anzeige finden
+  const activeBrandLabel = filterBrand
+    ? (TOP_BRANDS.find((b) => b.value === filterBrand)?.label || filterBrand)
+    : null;
+  const activeCatLabel = filterCat
+    ? (TOP_CATS.find((c) => c.value === filterCat)?.label || filterCat)
+    : null;
+
   const Chip = ({ label, active, onPress }) => (
     <button onClick={onPress} style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 20,
       border: `1.5px solid ${active ? standortAccent : T.border}`, background: active ? standortAccent : T.card,
@@ -627,9 +780,14 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     </button>
   );
 
+  // Gesamtzahl ohne deaktivierte Artikel
+  const totalActive = useMemo(() =>
+    PRODUCTS.filter((p) => !p.isMaster && !isDeactivated(p)).length,
+  [PRODUCTS]);
+
   const searchTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-      <Header title="Suche" sub={`${PRODUCTS.filter((p) => !p.isMaster).length.toLocaleString('de-DE')} Artikel im Sortiment`} />
+      <Header title="Suche" sub={`${totalActive.toLocaleString('de-DE')} Artikel im Sortiment`} />
       <div style={{ padding: `12px ${T.pad}px 0` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.field, borderRadius: 12, padding: '10px 14px', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
           {Icon.search(T.mute, 18)}
@@ -640,16 +798,32 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           )}
         </div>
       </div>
+      {/* Marken-Chips: Top 10 fest, aktiver Filter immer sichtbar */}
       <div style={{ padding: `8px ${T.pad}px 0` }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
           <Chip label="Alle Marken" active={!filterBrand} onPress={() => setFilterBrand(null)} />
-          {allBrands.map((b) => <Chip key={b} label={b} active={filterBrand === b} onPress={() => setFilterBrand(filterBrand === b ? null : b)} />)}
+          {TOP_BRANDS.map((b) => (
+            <Chip key={b.value} label={b.label} active={filterBrand === b.value}
+              onPress={() => setFilterBrand(filterBrand === b.value ? null : b.value)} />
+          ))}
+          {/* Aktiver Filter der nicht in Top 10 ist trotzdem anzeigen */}
+          {filterBrand && !TOP_BRANDS.find((b) => b.value === filterBrand) && (
+            <Chip label={activeBrandLabel} active={true} onPress={() => setFilterBrand(null)} />
+          )}
         </div>
       </div>
+      {/* Kategorien-Chips: Top 10 fest */}
       <div style={{ padding: `4px ${T.pad}px 6px` }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
           <Chip label="Alle Kategorien" active={!filterCat} onPress={() => setFilterCat(null)} />
-          {allCats.map((c) => <Chip key={c} label={c} active={filterCat === c} onPress={() => setFilterCat(filterCat === c ? null : c)} />)}
+          {TOP_CATS.map((c) => (
+            <Chip key={c.value} label={c.label} active={filterCat === c.value}
+              onPress={() => setFilterCat(filterCat === c.value ? null : c.value)} />
+          ))}
+          {/* Aktiver Filter der nicht in Top 10 ist trotzdem anzeigen */}
+          {filterCat && !TOP_CATS.find((c) => c.value === filterCat) && (
+            <Chip label={activeCatLabel} active={true} onPress={() => setFilterCat(null)} />
+          )}
         </div>
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: `0 ${T.pad}px ${T.pad}px`, display: 'flex', flexDirection: 'column', gap: T.gap - 2 }}>
