@@ -1,4 +1,4 @@
-// Atlantis live data source 
+// Atlantis live data source
 // Spalten: ARTIKELNR EAN NAME PREIS Coppi Zentrallager Steglitz Freiburg Hamburg
 //          MASTER_SLAVE UVP MARKE KATEGORIE BILD_URL STATUS RESTPOSTEN ATLOS_URL MASTER_MODEL
 window.DATA_SOURCE_URL = 'https://docs.google.com/spreadsheets/d/1qu5AvF6iWvPISBCpYUtiSjdTEqXlQrO0Qtm5-jTVZLE/export?format=csv&gid=0';
