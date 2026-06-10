@@ -1,4 +1,4 @@
-// Atlantis live data source — vereinfacht: jede Zeile = ein Produkt-Objekt 
+// Atlantis live data source — vereinfacht: jede Zeile = ein Produkt-Objekt
 // Spalten: ARTIKELNR EAN NAME PREIS Coppi Zentrallager Steglitz Freiburg Hamburg
 //          MASTER_SLAVE UVP MARKE KATEGORIE BILD_URL STATUS RESTPOSTEN ATLOS_URL MASTER_MODEL
 window.DATA_SOURCE_URL = 'https://docs.google.com/spreadsheets/d/1qu5AvF6iWvPISBCpYUtiSjdTEqXlQrO0Qtm5-jTVZLE/export?format=csv&gid=0';
@@ -119,37 +119,41 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const image = resolveImg(r.BILD_URL || '');
       const shopUrl = (r.ATLOS_URL || '').trim() || null;
 
-      const statusVal     = (r.STATUS || '').trim();
-      const restpostenVal = (r.RESTPOSTEN || '').trim().toUpperCase();
-      const isInactive    = statusVal === '0';
-      const isRestposten  = restpostenVal === 'JA';
+      const statusVal      = (r.STATUS || '').trim();
+      const restpostenVal  = (r.RESTPOSTEN || '').trim().toUpperCase();
+      const isInactive     = statusVal === '0';
+      const isRestposten   = restpostenVal === 'JA';
+
+      // Aktionsangebot: Freitext aus Spalte "Aktionsangebot" — leer = kein Angebot
+      const aktionsangebot = (r.Aktionsangebot || r.AKTIONSANGEBOT || '').trim() || null;
 
       // slaveArts: nur für Master-Artikel befüllt
       const slaveArts = isMaster ? (masterSlaveMap[art.toLowerCase()] || []) : [];
 
       return {
-        id:         art || ean,
+        id:            art || ean,
         ean,
-        allEans:    ean ? [ean] : [],
+        allEans:       ean ? [ean] : [],
         art,
-        allArts:    art ? [art] : [],
+        allArts:       art ? [art] : [],
         name,
         brand,
         cat,
         price,
-        sale:       onSale ? uvp : null,
-        stock:      stockHome,
+        sale:          onSale ? uvp : null,
+        stock:         stockHome,
         stockTotal,
         locations,
         locs,
         image,
         shopUrl,
         isMaster,
-        masterArt:  masterModel || null,   // Art.-Nr. des zugehörigen Masters (nur bei Slaves)
-        slaveArts,                          // Art.-Nrn. aller Slaves (nur bei Mastern)
-        inactive:   isInactive,
-        restposten: isRestposten,
-        variants:   [],  // nicht mehr genutzt — Geschwister werden live über slaveArts geladen
+        masterArt:     masterModel || null,
+        slaveArts,
+        inactive:      isInactive,
+        restposten:    isRestposten,
+        aktionsangebot,
+        variants:      [],
         _s: (name + ' ' + brand + ' ' + art + ' ' + cat + ' ' + ean).toLowerCase(),
       };
     }).filter((p) => p.id);  // Zeilen ohne Art.-Nr. und EAN verwerfen
