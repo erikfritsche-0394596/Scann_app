@@ -957,39 +957,30 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   // ── Debug-Tab ─────────────────────────────────────────────────
   const debugTab = (() => {
     const all = PRODUCTS || [];
-    const isMasterHidden  = all.filter(p => p.isMaster);
-    const isDeact         = all.filter(p => (p.cat||'').includes('Deaktivierte Artikel'));
-    const visibleTotal    = all.filter(p => !p.isMaster && !(p.cat||'').includes('Deaktivierte Artikel'));
-    const masterWithSlaves = all.filter(p => !p.isMaster && p.slaveArts && p.slaveArts.length > 0);
-    const rows = [
-      ['Gesamt geladen',                         all.length,               '#2563eb'],
-      ['→ isMaster=true (ausgeblendet)',          isMasterHidden.length,    '#dc2626'],
-      ['→ Deaktivierte Artikel (ausgeblendet)',   isDeact.length,           '#b45309'],
-      ['→ Sichtbar im Sortiment',                visibleTotal.length,      '#16a34a'],
-      ['Master MIT Preis (sichtbar, hat Slaves)', masterWithSlaves.length,  '#7c3aed'],
-    ];
+    const hidden = all.filter(p => p.isMaster);
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-        <Header title="Debug" sub="Artikel-Analyse" />
-        <div style={{ flex: 1, overflow: 'auto', padding: T.pad }}>
-          <div style={{ background: T.card, borderRadius: 12, overflow: 'hidden', boxShadow: T.tileShadow, marginBottom: 16 }}>
-            {rows.map(([label, val, color], i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 16px', borderBottom: i < rows.length-1 ? `1px solid ${T.border}` : 'none' }}>
-                <span style={{ fontSize: F(13), color: T.ink }}>{label}</span>
-                <span style={{ fontSize: F(15), fontWeight: 800, color }}>{val.toLocaleString('de-DE')}</span>
+        <Header title="Debug" sub={`${hidden.length.toLocaleString('de-DE')} ausgeblendete Artikel`} />
+        <div style={{ flex: 1, overflow: 'auto', padding: T.pad, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {hidden.map((p, i) => (
+            <div key={i} style={{ background: T.card, borderRadius: 10, padding: '10px 14px', boxShadow: T.tileShadow, borderLeft: `3px solid #dc2626` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: 'monospace', fontSize: F(11), color: T.mute, flexShrink: 0 }}>{p.art}</span>
+                <span style={{ fontSize: F(12), fontWeight: 700, color: p.price > 0 ? '#16a34a' : '#dc2626', flexShrink: 0 }}>
+                  {p.price > 0 ? EUR(p.price) : 'kein Preis'}
+                </span>
               </div>
-            ))}
-          </div>
-          <div style={{ background: T.card, borderRadius: 12, padding: 14, boxShadow: T.tileShadow }}>
-            <div style={{ fontSize: F(12), fontWeight: 700, color: T.mute, marginBottom: 8 }}>BEISPIELE: isMaster=true (ausgeblendet)</div>
-            {isMasterHidden.slice(0, 8).map((p, i) => (
-              <div key={i} style={{ padding: '5px 0', borderBottom: `1px solid ${T.border}`, fontSize: F(12), color: T.ink }}>
-                <span style={{ fontFamily: 'monospace', color: T.mute, marginRight: 8 }}>{p.art}</span>
-                {p.name}
-                <span style={{ float: 'right', color: '#dc2626', fontWeight: 700 }}>Preis: {p.price}</span>
+              <div style={{ fontSize: F(13), fontWeight: 600, color: T.ink, marginTop: 2, lineHeight: 1.3 }}>{p.name}</div>
+              <div style={{ fontSize: F(11), color: T.mute, marginTop: 2 }}>
+                {p.brand}{p.cat ? ` · ${p.cat}` : ''}{p.slaveArts?.length ? ` · ${p.slaveArts.length} Slaves` : ''}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+          {hidden.length === 0 && (
+            <div style={{ textAlign: 'center', color: T.mute, marginTop: 60, fontSize: F(14) }}>
+              Keine ausgeblendeten Artikel ✓
+            </div>
+          )}
         </div>
       </div>
     );
