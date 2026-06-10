@@ -254,7 +254,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <div style={{ fontSize: F(11), color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5 }}>{p.brand}{time ? ` · ${time}` : ''}</div>
           <div style={{ fontSize: F(14), fontWeight: 700, color: T.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: F(14), fontWeight: 800, color: onSale ? T.red : standortAccent }}>{EUR(p.price)}</span>
+            <span style={{ fontSize: F(14), fontWeight: 800, color: onSale ? T.red : standortAccent }}>{p.noPrice ? '– Preis folgt' : EUR(p.price)}</span>
             <StockDot st={st} size={7} />
             <span style={{ fontSize: F(12), color: T.mute }}>{stock} Stk</span>
             {p.inactive   && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
@@ -553,15 +553,24 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: T.gap, marginTop: T.gap + 4 }}>
             <Tile>
               <TileLabel icon={Icon.tag}>Preis</TileLabel>
-              <div style={{ fontSize: F(24), fontWeight: 800, color: onSale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>
-                {EUR(detail.price)}
-              </div>
-              {onSale ? (
-                <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.sale)}</span>
-                  <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
+              {detail.noPrice ? (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontSize: F(13), fontWeight: 700, color: '#b45309' }}>Preis wird aktualisiert</div>
+                  <div style={{ marginTop: 4, fontSize: F(11), color: T.mute, lineHeight: 1.4 }}>Wir arbeiten daran. Aktuellen Preis bitte im Onlineshop prüfen.</div>
                 </div>
-              ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
+              ) : (
+                <>
+                  <div style={{ fontSize: F(24), fontWeight: 800, color: onSale ? T.red : standortAccent, marginTop: 6, lineHeight: 1 }}>
+                    {EUR(detail.price)}
+                  </div>
+                  {onSale ? (
+                    <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: F(12), color: T.mute, textDecoration: 'line-through' }}>{EUR(detail.sale)}</span>
+                      <span style={{ fontSize: F(11), fontWeight: 700, color: '#fff', background: T.red, padding: '1px 6px', borderRadius: 5 }}>−{save}%</span>
+                    </div>
+                  ) : <div style={{ marginTop: 5, fontSize: F(12), color: T.mute }}>inkl. MwSt.</div>}
+                </>
+              )}
             </Tile>
             <Tile>
               <TileLabel icon={Icon.box}>Bestand · {standort.label}</TileLabel>
@@ -778,13 +787,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const toks = q2.length >= 2 ? q2.split(/\s+/).filter(Boolean) : [];
   const SEARCH_CAP = 40;
 
-  // Deaktivierte Artikel (Kategorie enthält "Deaktivierte Artikel") grundsätzlich ausblenden
-  const isDeactivated = (p) => (p.cat || '').includes('Deaktivierte Artikel');
-
   const matches = useMemo(() => {
     return PRODUCTS.filter((p) => {
       if (p.isMaster) return false;
-      if (isDeactivated(p)) return false;
       const s = p._s || (p.name + ' ' + p.brand + ' ' + p.art + ' ' + p.cat + ' ' + p.ean).toLowerCase();
       const textOk   = toks.length === 0 || tokenMatch(s, toks);
       const brandOk  = !filterBrand  || p.brand === filterBrand;
@@ -816,7 +821,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   // Anzahl Aktionsartikel für die Suggestion
   const aktionenCount = useMemo(() =>
-    PRODUCTS.filter((p) => !p.isMaster && !isDeactivated(p) && !!p.aktionsangebot).length,
+    PRODUCTS.filter((p) => !p.isMaster && !!p.aktionsangebot).length,
   [PRODUCTS]);
 
   // Zeige Aktions-Suggestion wenn Eingabe auf "aktion" matcht
@@ -824,9 +829,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     && 'aktionsangebote'.startsWith(q.trim().toLowerCase())
     && !filterAktion;
 
-  // Gesamtzahl ohne deaktivierte Artikel
+  // Gesamtzahl aktiver Artikel
   const totalActive = useMemo(() =>
-    PRODUCTS.filter((p) => !p.isMaster && !isDeactivated(p)).length,
+    PRODUCTS.filter((p) => !p.isMaster).length,
   [PRODUCTS]);
 
   const searchTab = (
