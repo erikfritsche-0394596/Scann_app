@@ -181,7 +181,11 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const shopUrl = (anchor.ATLOS_URL || '').trim() || null;
 
       // Master/Slave-Flags
-      const isMasterProduct = !!master;
+      // isMaster nur true wenn der Master auch echte Slaves hat —
+      // ein "verwaister" Master (keine Slaves verknüpft) soll als normaler
+      // Einzelartikel in der Suche erscheinen und nicht ausgeblendet werden.
+      const hasRealSlaves = rows.some((r) => (r.MASTER_SLAVE || '').toUpperCase() !== 'M');
+      const isMasterProduct = !!master && hasRealSlaves;
       const slaveArts = scannables.map((r) => r.ARTIKELNR).filter(Boolean).filter((a) => a !== art);
 
       return {
