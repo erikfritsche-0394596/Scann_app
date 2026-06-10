@@ -61,6 +61,9 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const [q, setQ] = useState('');
   const [standort, setStandort] = useState(STANDORTE[0]);
   const [showStandortPicker, setShowStandortPicker] = useState(false);
+  const [debugFilterSlaves, setDebugFilterSlaves] = useState('all');
+  const [debugFilterPreis,  setDebugFilterPreis]  = useState('all');
+  const [debugFilterName,   setDebugFilterName]   = useState('all');
 
   const standortAccent = T.dark ? standort.accentDark : standort.accent;
 
@@ -956,23 +959,18 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   // ── Debug-Tab ─────────────────────────────────────────────────
   const debugTab = (() => {
-    const { useState: us } = React;
-    const [filterSlaves, setFilterSlaves] = us('all');   // 'all' | '0' | '1+'
-    const [filterPreis,  setFilterPreis]  = us('all');   // 'all' | 'ja' | 'nein'
-    const [filterName,   setFilterName]   = us('all');   // 'all' | 'ja' | 'nein'
-
     const all = PRODUCTS || [];
     const hidden = all.filter(p => p.isMaster);
 
     const filtered = hidden.filter(p => {
       const slaveCount = p.slaveArts?.length || 0;
-      if (filterSlaves === '0'  && slaveCount !== 0) return false;
-      if (filterSlaves === '1+' && slaveCount === 0) return false;
-      if (filterPreis  === 'ja'   && !(p.price > 0)) return false;
-      if (filterPreis  === 'nein' && p.price > 0)    return false;
+      if (debugFilterSlaves === '0'  && slaveCount !== 0) return false;
+      if (debugFilterSlaves === '1+' && slaveCount === 0) return false;
+      if (debugFilterPreis  === 'ja'   && !(p.price > 0)) return false;
+      if (debugFilterPreis  === 'nein' && p.price > 0)    return false;
       const hasMasterInName = /master/i.test(p.name || '') || /master/i.test(p.art || '');
-      if (filterName === 'ja'   && !hasMasterInName) return false;
-      if (filterName === 'nein' &&  hasMasterInName) return false;
+      if (debugFilterName === 'ja'   && !hasMasterInName) return false;
+      if (debugFilterName === 'nein' &&  hasMasterInName) return false;
       return true;
     });
 
@@ -995,11 +993,11 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
         <Header title="Debug" sub={`${filtered.length.toLocaleString('de-DE')} / ${hidden.length.toLocaleString('de-DE')} ausgeblendet`} />
         <div style={{ padding: `10px ${T.pad}px`, background: T.card, borderBottom: `1px solid ${T.border}` }}>
-          <ChipGroup label="Slaves" value={filterSlaves} onChange={setFilterSlaves}
+          <ChipGroup label="Slaves" value={debugFilterSlaves} onChange={setDebugFilterSlaves}
             options={[['all','Alle'], ['0','0 Slaves'], ['1+','1+ Slaves']]} />
-          <ChipGroup label="Preis" value={filterPreis} onChange={setFilterPreis}
+          <ChipGroup label="Preis" value={debugFilterPreis} onChange={setDebugFilterPreis}
             options={[['all','Alle'], ['ja','Mit Preis'], ['nein','Kein Preis']]} />
-          <ChipGroup label="„master" im Namen/Art.-Nr." value={filterName} onChange={setFilterName}
+          <ChipGroup label="„master" im Namen/Art.-Nr." value={debugFilterName} onChange={setDebugFilterName}
             options={[['all','Alle'], ['ja','Enthält master'], ['nein','Ohne master']]} />
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: T.pad, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1013,7 +1011,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               </div>
               <div style={{ fontSize: F(13), fontWeight: 600, color: T.ink, marginTop: 2, lineHeight: 1.3 }}>{p.name}</div>
               <div style={{ fontSize: F(11), color: T.mute, marginTop: 2 }}>
-                {p.brand}{p.cat ? ` · ${p.cat}` : ''}{p.slaveArts?.length ? ` · ${p.slaveArts.length} Slaves` : ' · 0 Slaves'}
+                {p.brand}{p.cat ? ` · ${p.cat}` : ''}{` · ${p.slaveArts?.length || 0} Slaves`}
               </div>
             </div>
           ))}
