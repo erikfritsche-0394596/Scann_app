@@ -149,7 +149,7 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
         locs,
         image,
         shopUrl,
-        isMaster:      false,  // alle Artikel werden angezeigt
+        isMaster:      isMaster && slaveArts.length > 0,  // nur ausblenden wenn Master MIT Slaves
         masterArt:     masterModel || null,
         slaveArts,
         inactive:      isInactive,
