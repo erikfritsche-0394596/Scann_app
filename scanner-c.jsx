@@ -956,13 +956,54 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   // ── Debug-Tab ─────────────────────────────────────────────────
   const debugTab = (() => {
+    const { useState: us } = React;
+    const [filterSlaves, setFilterSlaves] = us('all');   // 'all' | '0' | '1+'
+    const [filterPreis,  setFilterPreis]  = us('all');   // 'all' | 'ja' | 'nein'
+    const [filterName,   setFilterName]   = us('all');   // 'all' | 'ja' | 'nein'
+
     const all = PRODUCTS || [];
     const hidden = all.filter(p => p.isMaster);
+
+    const filtered = hidden.filter(p => {
+      const slaveCount = p.slaveArts?.length || 0;
+      if (filterSlaves === '0'  && slaveCount !== 0) return false;
+      if (filterSlaves === '1+' && slaveCount === 0) return false;
+      if (filterPreis  === 'ja'   && !(p.price > 0)) return false;
+      if (filterPreis  === 'nein' && p.price > 0)    return false;
+      const hasMasterInName = /master/i.test(p.name || '') || /master/i.test(p.art || '');
+      if (filterName === 'ja'   && !hasMasterInName) return false;
+      if (filterName === 'nein' &&  hasMasterInName) return false;
+      return true;
+    });
+
+    const ChipGroup = ({ label, value, onChange, options }) => (
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: F(10), fontWeight: 700, color: T.mute, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {options.map(([val, lbl]) => (
+            <button key={val} onClick={() => onChange(val)} style={{
+              padding: '4px 12px', borderRadius: 20, border: `1.5px solid ${value === val ? standortAccent : T.border}`,
+              background: value === val ? standortAccent : T.card, color: value === val ? (T.dark ? '#06131f' : '#fff') : T.ink,
+              fontSize: F(12), fontWeight: value === val ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit'
+            }}>{lbl}</button>
+          ))}
+        </div>
+      </div>
+    );
+
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
-        <Header title="Debug" sub={`${hidden.length.toLocaleString('de-DE')} ausgeblendete Artikel`} />
+        <Header title="Debug" sub={`${filtered.length.toLocaleString('de-DE')} / ${hidden.length.toLocaleString('de-DE')} ausgeblendet`} />
+        <div style={{ padding: `10px ${T.pad}px`, background: T.card, borderBottom: `1px solid ${T.border}` }}>
+          <ChipGroup label="Slaves" value={filterSlaves} onChange={setFilterSlaves}
+            options={[['all','Alle'], ['0','0 Slaves'], ['1+','1+ Slaves']]} />
+          <ChipGroup label="Preis" value={filterPreis} onChange={setFilterPreis}
+            options={[['all','Alle'], ['ja','Mit Preis'], ['nein','Kein Preis']]} />
+          <ChipGroup label="„master" im Namen/Art.-Nr." value={filterName} onChange={setFilterName}
+            options={[['all','Alle'], ['ja','Enthält master'], ['nein','Ohne master']]} />
+        </div>
         <div style={{ flex: 1, overflow: 'auto', padding: T.pad, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {hidden.map((p, i) => (
+          {filtered.map((p, i) => (
             <div key={i} style={{ background: T.card, borderRadius: 10, padding: '10px 14px', boxShadow: T.tileShadow, borderLeft: `3px solid #dc2626` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
                 <span style={{ fontFamily: 'monospace', fontSize: F(11), color: T.mute, flexShrink: 0 }}>{p.art}</span>
@@ -972,13 +1013,13 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
               </div>
               <div style={{ fontSize: F(13), fontWeight: 600, color: T.ink, marginTop: 2, lineHeight: 1.3 }}>{p.name}</div>
               <div style={{ fontSize: F(11), color: T.mute, marginTop: 2 }}>
-                {p.brand}{p.cat ? ` · ${p.cat}` : ''}{p.slaveArts?.length ? ` · ${p.slaveArts.length} Slaves` : ''}
+                {p.brand}{p.cat ? ` · ${p.cat}` : ''}{p.slaveArts?.length ? ` · ${p.slaveArts.length} Slaves` : ' · 0 Slaves'}
               </div>
             </div>
           ))}
-          {hidden.length === 0 && (
+          {filtered.length === 0 && (
             <div style={{ textAlign: 'center', color: T.mute, marginTop: 60, fontSize: F(14) }}>
-              Keine ausgeblendeten Artikel ✓
+              Keine Artikel für diese Filter
             </div>
           )}
         </div>
