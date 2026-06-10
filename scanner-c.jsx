@@ -521,16 +521,22 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <div onClick={goToAktionen}
               style={{
                 marginTop: T.gap, borderRadius: T.radius, padding: '10px 14px',
-                background: 'linear-gradient(135deg, #b8860b 0%, #daa520 40%, #ffd700 60%, #daa520 80%, #b8860b 100%)',
+                background: '#DAA520',
                 display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
               }}>
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
                 <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#3d2b00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <line x1="7" y1="7" x2="7.01" y2="7" stroke="#3d2b00" strokeWidth="2.5" strokeLinecap="round"/>
               </svg>
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: F(10), fontWeight: 700, color: '#5a3e00', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Aktionsangebot</div>
                 <div style={{ fontSize: F(13), fontWeight: 600, color: '#3d2b00', lineHeight: 1.3 }}>{detail.aktionsangebot}</div>
+              </div>
+              <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.15)', borderRadius: 6, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: F(11), color: '#3d2b00', fontWeight: 700 }}>Alle</span>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="#3d2b00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               </div>
             </div>
           )}
@@ -806,6 +812,16 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     </button>
   );
 
+  // Anzahl Aktionsartikel für die Suggestion
+  const aktionenCount = useMemo(() =>
+    PRODUCTS.filter((p) => !p.isMaster && !isDeactivated(p) && !!p.aktionsangebot).length,
+  [PRODUCTS]);
+
+  // Zeige Aktions-Suggestion wenn Eingabe auf "aktion" matcht
+  const showAktionSuggestion = q.trim().length >= 2
+    && 'aktionsangebote'.startsWith(q.trim().toLowerCase())
+    && !filterAktion;
+
   // Gesamtzahl ohne deaktivierte Artikel
   const totalActive = useMemo(() =>
     PRODUCTS.filter((p) => !p.isMaster && !isDeactivated(p)).length,
@@ -814,17 +830,65 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const searchTab = (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
       <Header title="Suche" sub={`${totalActive.toLocaleString('de-DE')} Artikel im Sortiment`} />
-      <div style={{ padding: `12px ${T.pad}px 0` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.field, borderRadius: 12, padding: '10px 14px', border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>
+      <div style={{ padding: `12px ${T.pad}px 0`, position: 'relative' }}>
+        {/* Suchfeld — zeigt Aktions-Tag wenn Filter aktiv, sonst normales Input */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: T.field, borderRadius: 12,
+          padding: filterAktion ? '8px 14px' : '10px 14px',
+          border: filterAktion ? `1.5px solid #DAA520` : `1px solid ${T.border}`,
+          boxShadow: T.tileShadow }}>
           {Icon.search(T.mute, 18)}
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, Marke, Art.-Nr. oder EAN"
+          {/* Aktions-Tag im Suchfeld */}
+          {filterAktion && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#DAA520',
+              color: '#3d2b00', borderRadius: 6, padding: '3px 8px 3px 7px', fontSize: F(13),
+              fontWeight: 700, flexShrink: 0 }}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#3d2b00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="7" y1="7" x2="7.01" y2="7" stroke="#3d2b00" strokeWidth="2.5" strokeLinecap="round"/>
+              </svg>
+              Aktionen
+              <span onClick={() => setFilterAktion(false)}
+                style={{ fontSize: 16, lineHeight: 1, opacity: 0.6, marginLeft: 1, cursor: 'pointer' }}>×</span>
+            </span>
+          )}
+          <input value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder={filterAktion ? 'Suche verfeinern…' : 'Name, Marke, Art.-Nr. oder EAN'}
             style={{ border: 'none', outline: 'none', flex: 1, fontSize: F(15), color: T.ink, background: 'transparent', fontFamily: 'inherit' }} />
           {(q || activeFilters > 0) && (
-            <button onClick={() => { setQ(''); setFilterBrand(null); setFilterCat(null); setFilterAktion(false); }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>{Icon.close(T.mute, 18)}</button>
+            <button onClick={() => { setQ(''); setFilterBrand(null); setFilterCat(null); setFilterAktion(false); }}
+              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+              {Icon.close(T.mute, 18)}
+            </button>
           )}
         </div>
+        {/* Autocomplete-Dropdown: Aktions-Suggestion */}
+        {showAktionSuggestion && (
+          <div style={{ position: 'absolute', left: T.pad, right: T.pad, top: '100%', zIndex: 50,
+            background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, overflow: 'hidden',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.10)', marginTop: 4 }}>
+            <button
+              onClick={() => { setFilterAktion(true); setQ(''); }}
+              style={{ width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
+                background: T.dark ? 'rgba(218,165,32,0.12)' : '#DAA52012' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#DAA520',
+                color: '#3d2b00', borderRadius: 6, padding: '3px 8px 3px 7px', fontSize: F(13), fontWeight: 700, flexShrink: 0 }}>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#3d2b00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <line x1="7" y1="7" x2="7.01" y2="7" stroke="#3d2b00" strokeWidth="2.5" strokeLinecap="round"/>
+                </svg>
+                Aktionen
+              </span>
+              <span style={{ fontSize: F(13), color: T.mute }}>{aktionenCount} Aktionsartikel anzeigen</span>
+            </button>
+            <div style={{ padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 8, borderTop: `1px solid ${T.border}` }}>
+              {Icon.search(T.mute, 14)}
+              <span style={{ fontSize: F(13), color: T.mute }}>nach „{q}" suchen…</span>
+            </div>
+          </div>
+        )}
       </div>
-      {/* Marken-Chips: Top 10 fest, aktiver Filter immer sichtbar */}
+      {/* Marken-Chips */}
       <div style={{ padding: `8px ${T.pad}px 0` }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
           <Chip label="Alle Marken" active={!filterBrand} onPress={() => setFilterBrand(null)} />
@@ -832,14 +896,13 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <Chip key={b.value} label={b.label} active={filterBrand === b.value}
               onPress={() => setFilterBrand(filterBrand === b.value ? null : b.value)} />
           ))}
-          {/* Aktiver Filter der nicht in Top 10 ist trotzdem anzeigen */}
           {filterBrand && !TOP_BRANDS.find((b) => b.value === filterBrand) && (
             <Chip label={activeBrandLabel} active={true} onPress={() => setFilterBrand(null)} />
           )}
         </div>
       </div>
-      {/* Kategorien-Chips: Top 10 fest */}
-      <div style={{ padding: `4px ${T.pad}px 0` }}>
+      {/* Kategorien-Chips */}
+      <div style={{ padding: `4px ${T.pad}px 6px` }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
           <Chip label="Alle Kategorien" active={!filterCat} onPress={() => setFilterCat(null)} />
           {TOP_CATS.map((c) => (
@@ -850,18 +913,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <Chip label={activeCatLabel} active={true} onPress={() => setFilterCat(null)} />
           )}
         </div>
-      </div>
-      {/* Aktions-Chip */}
-      <div style={{ padding: `4px ${T.pad}px 6px` }}>
-        <button
-          onClick={() => setFilterAktion((v) => !v)}
-          style={{ height: 30, padding: '0 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontSize: F(12), fontWeight: filterAktion ? 700 : 500,
-            background: filterAktion ? 'linear-gradient(90deg, #daa520, #ffd700, #daa520)' : T.card,
-            color: filterAktion ? '#3d2b00' : T.ink,
-            outline: filterAktion ? 'none' : `1.5px solid ${T.border}`,
-          }}>
-          🏷 Aktionsangebote{filterAktion ? ' ×' : ''}
-        </button>
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: `0 ${T.pad}px ${T.pad}px`, display: 'flex', flexDirection: 'column', gap: T.gap - 2 }}>
         {toks.length === 0 && !filterBrand && !filterCat && !filterAktion ? (
