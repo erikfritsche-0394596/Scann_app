@@ -259,7 +259,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             <span style={{ fontSize: F(12), color: T.mute }}>{stock} Stk</span>
             {p.inactive   && <span style={{ fontSize: F(10), fontWeight: 700, color: '#92400e', background: '#fef3c7', padding: '1px 5px', borderRadius: 4 }}>inaktiv</span>}
             {p.restposten && <span style={{ fontSize: F(10), fontWeight: 700, color: '#7c2d12', background: '#ffedd5', padding: '1px 5px', borderRadius: 4 }}>Restposten</span>}
-            {p.aktionsangebot && <span style={{ fontSize: F(10), fontWeight: 700, color: '#3d2b00', background: 'linear-gradient(90deg, #daa520, #ffd700, #daa520)', padding: '1px 7px', borderRadius: 4 }}>🏷 Aktion</span>}
+            {p.aktionsangebot && <span onClick={(e) => { e.stopPropagation(); goToAktionen(); }} style={{ fontSize: F(10), fontWeight: 700, color: '#3d2b00', background: 'linear-gradient(90deg, #daa520, #ffd700, #daa520)', padding: '1px 7px', borderRadius: 4, cursor: 'pointer' }}>🏷 Aktion</span>}
           </div>
         </div>
         {Icon.chevron(T.mute, 20)}
@@ -518,11 +518,12 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
           {/* Aktionsbanner */}
           {detail.aktionsangebot && (
-            <div style={{
-              marginTop: T.gap, borderRadius: T.radius, padding: '10px 14px',
-              background: 'linear-gradient(135deg, #b8860b 0%, #daa520 40%, #ffd700 60%, #daa520 80%, #b8860b 100%)',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
+            <div onClick={goToAktionen}
+              style={{
+                marginTop: T.gap, borderRadius: T.radius, padding: '10px 14px',
+                background: 'linear-gradient(135deg, #b8860b 0%, #daa520 40%, #ffd700 60%, #daa520 80%, #b8860b 100%)',
+                display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+              }}>
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
                 <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" stroke="#3d2b00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 <line x1="7" y1="7" x2="7.01" y2="7" stroke="#3d2b00" strokeWidth="2.5" strokeLinecap="round"/>
@@ -759,8 +760,15 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
 
   const [filterBrand, setFilterBrand] = useState(null);
   const [filterCat,   setFilterCat]   = useState(null);
+  const [filterAktion, setFilterAktion] = useState(false);
   const toks = q2.length >= 2 ? q2.split(/\s+/).filter(Boolean) : [];
   const SEARCH_CAP = 40;
+
+  // Hilfsfunktion: zum Suche-Tab springen und Aktionsfilter setzen
+  const goToAktionen = () => {
+    setFilterBrand(null); setFilterCat(null); setFilterAktion(true);
+    setQ(''); setDetail(null); setTab('search');
+  };
 
   // Deaktivierte Artikel (Kategorie enthält "Deaktivierte Artikel") grundsätzlich ausblenden
   const isDeactivated = (p) => (p.cat || '').includes('Deaktivierte Artikel');
@@ -770,15 +778,16 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
       if (p.isMaster) return false;
       if (isDeactivated(p)) return false;
       const s = p._s || (p.name + ' ' + p.brand + ' ' + p.art + ' ' + p.cat + ' ' + p.ean).toLowerCase();
-      const textOk  = toks.length === 0 || tokenMatch(s, toks);
-      const brandOk = !filterBrand || p.brand === filterBrand;
-      const catOk   = !filterCat   || p.cat   === filterCat;
-      return textOk && brandOk && catOk;
+      const textOk   = toks.length === 0 || tokenMatch(s, toks);
+      const brandOk  = !filterBrand  || p.brand === filterBrand;
+      const catOk    = !filterCat    || p.cat   === filterCat;
+      const aktionOk = !filterAktion || !!p.aktionsangebot;
+      return textOk && brandOk && catOk && aktionOk;
     });
-  }, [PRODUCTS, toks, filterBrand, filterCat]);
+  }, [PRODUCTS, toks, filterBrand, filterCat, filterAktion]);
 
   const shown = matches.slice(0, SEARCH_CAP);
-  const activeFilters = (filterBrand ? 1 : 0) + (filterCat ? 1 : 0);
+  const activeFilters = (filterBrand ? 1 : 0) + (filterCat ? 1 : 0) + (filterAktion ? 1 : 0);
 
   // Aktiven Chip-Label für die Anzeige finden
   const activeBrandLabel = filterBrand
@@ -811,7 +820,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, Marke, Art.-Nr. oder EAN"
             style={{ border: 'none', outline: 'none', flex: 1, fontSize: F(15), color: T.ink, background: 'transparent', fontFamily: 'inherit' }} />
           {(q || activeFilters > 0) && (
-            <button onClick={() => { setQ(''); setFilterBrand(null); setFilterCat(null); }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>{Icon.close(T.mute, 18)}</button>
+            <button onClick={() => { setQ(''); setFilterBrand(null); setFilterCat(null); setFilterAktion(false); }} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>{Icon.close(T.mute, 18)}</button>
           )}
         </div>
       </div>
@@ -830,21 +839,32 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
         </div>
       </div>
       {/* Kategorien-Chips: Top 10 fest */}
-      <div style={{ padding: `4px ${T.pad}px 6px` }}>
+      <div style={{ padding: `4px ${T.pad}px 0` }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
           <Chip label="Alle Kategorien" active={!filterCat} onPress={() => setFilterCat(null)} />
           {TOP_CATS.map((c) => (
             <Chip key={c.value} label={c.label} active={filterCat === c.value}
               onPress={() => setFilterCat(filterCat === c.value ? null : c.value)} />
           ))}
-          {/* Aktiver Filter der nicht in Top 10 ist trotzdem anzeigen */}
           {filterCat && !TOP_CATS.find((c) => c.value === filterCat) && (
             <Chip label={activeCatLabel} active={true} onPress={() => setFilterCat(null)} />
           )}
         </div>
       </div>
+      {/* Aktions-Chip */}
+      <div style={{ padding: `4px ${T.pad}px 6px` }}>
+        <button
+          onClick={() => setFilterAktion((v) => !v)}
+          style={{ height: 30, padding: '0 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', fontSize: F(12), fontWeight: filterAktion ? 700 : 500,
+            background: filterAktion ? 'linear-gradient(90deg, #daa520, #ffd700, #daa520)' : T.card,
+            color: filterAktion ? '#3d2b00' : T.ink,
+            outline: filterAktion ? 'none' : `1.5px solid ${T.border}`,
+          }}>
+          🏷 Aktionsangebote{filterAktion ? ' ×' : ''}
+        </button>
+      </div>
       <div style={{ flex: 1, overflow: 'auto', padding: `0 ${T.pad}px ${T.pad}px`, display: 'flex', flexDirection: 'column', gap: T.gap - 2 }}>
-        {toks.length === 0 && !filterBrand && !filterCat ? (
+        {toks.length === 0 && !filterBrand && !filterCat && !filterAktion ? (
           <div style={{ textAlign: 'center', color: T.mute, marginTop: 40, fontSize: F(14), lineHeight: 1.5 }}>Mindestens 2 Zeichen eingeben<br />oder Marke / Kategorie antippen</div>
         ) : shown.length ? (
           <>
