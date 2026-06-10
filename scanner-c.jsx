@@ -949,6 +949,47 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     </div>
   );
 
+  // ── Debug-Tab ─────────────────────────────────────────────────
+  const debugTab = (() => {
+    const all = PRODUCTS || [];
+    const isMasterHidden  = all.filter(p => p.isMaster);
+    const isDeact         = all.filter(p => (p.cat||'').includes('Deaktivierte Artikel'));
+    const visibleTotal    = all.filter(p => !p.isMaster && !(p.cat||'').includes('Deaktivierte Artikel'));
+    const masterWithSlaves = all.filter(p => !p.isMaster && p.slaveArts && p.slaveArts.length > 0);
+    const rows = [
+      ['Gesamt geladen',                         all.length,               '#2563eb'],
+      ['→ isMaster=true (ausgeblendet)',          isMasterHidden.length,    '#dc2626'],
+      ['→ Deaktivierte Artikel (ausgeblendet)',   isDeact.length,           '#b45309'],
+      ['→ Sichtbar im Sortiment',                visibleTotal.length,      '#16a34a'],
+      ['Master MIT Preis (sichtbar, hat Slaves)', masterWithSlaves.length,  '#7c3aed'],
+    ];
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: T.bg }}>
+        <Header title="Debug" sub="Artikel-Analyse" />
+        <div style={{ flex: 1, overflow: 'auto', padding: T.pad }}>
+          <div style={{ background: T.card, borderRadius: 12, overflow: 'hidden', boxShadow: T.tileShadow, marginBottom: 16 }}>
+            {rows.map(([label, val, color], i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 16px', borderBottom: i < rows.length-1 ? `1px solid ${T.border}` : 'none' }}>
+                <span style={{ fontSize: F(13), color: T.ink }}>{label}</span>
+                <span style={{ fontSize: F(15), fontWeight: 800, color }}>{val.toLocaleString('de-DE')}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: T.card, borderRadius: 12, padding: 14, boxShadow: T.tileShadow }}>
+            <div style={{ fontSize: F(12), fontWeight: 700, color: T.mute, marginBottom: 8 }}>BEISPIELE: isMaster=true (ausgeblendet)</div>
+            {isMasterHidden.slice(0, 8).map((p, i) => (
+              <div key={i} style={{ padding: '5px 0', borderBottom: `1px solid ${T.border}`, fontSize: F(12), color: T.ink }}>
+                <span style={{ fontFamily: 'monospace', color: T.mute, marginRight: 8 }}>{p.art}</span>
+                {p.name}
+                <span style={{ float: 'right', color: '#dc2626', fontWeight: 700 }}>Preis: {p.price}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  })();
+
   // ── Tab-Bar ───────────────────────────────────────────────────
   const TabBtn = ({ id, label, icon }) => {
     const active = tab === id;
@@ -971,6 +1012,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
           {tab === 'scan'    && scanTab}
           {tab === 'search'  && searchTab}
           {tab === 'history' && historyTab}
+          {tab === 'debug'   && debugTab}
         </div>
       </div>
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 9, background: T.headerBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderTop: `1px solid ${T.border}`, paddingBottom: padBotTabs, display: 'flex' }}>
@@ -978,6 +1020,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
         <TabBtn id="scan"    label="Scannen" icon={Icon.scan} />
         <TabBtn id="search"  label="Suche"   icon={Icon.search} />
         <TabBtn id="history" label="Verlauf" icon={Icon.history} />
+        <TabBtn id="debug"   label="Debug"   icon={(c,s) => <span style={{fontSize:s,lineHeight:1}}>🐛</span>} />
       </div>
       <div style={{ position: 'absolute', inset: 0, zIndex: 20, transform: detail ? 'translateX(0)' : 'translateX(100%)', transition: 'transform .3s cubic-bezier(.22,1,.36,1)', pointerEvents: detail ? 'auto' : 'none' }}>
         {detailScreen}
