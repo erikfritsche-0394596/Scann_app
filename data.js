@@ -181,10 +181,13 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const shopUrl = (anchor.ATLOS_URL || '').trim() || null;
 
       // Master/Slave-Flags
-      // Ein Master wird nur ausgeblendet wenn er KEINEN eigenen Preis hat.
-      // Master mit Preis > 0 erscheinen normal in der Suche.
-      const masterHasNoPrice = !!master && num(master.PREIS) === 0;
-      const isMasterProduct = masterHasNoPrice;
+      // Ausblenden NUR wenn: es eine Master-Zeile gibt, die keinen eigenen Preis hat,
+      // UND die Gruppe keine Slave-Zeilen enthält (d.h. scannables = [master] als Fallback).
+      // Gruppen mit echten Slaves werden als Varianten-Produkt angezeigt (Slaves haben Preis).
+      // Master-Zeilen mit eigenem Preis werden ebenfalls normal angezeigt.
+      const hasRealSlaves = rows.some((r) => (r.MASTER_SLAVE || '').toUpperCase() !== 'M');
+      const masterPrice   = master ? num(master.PREIS) : 0;
+      const isMasterProduct = !!master && !hasRealSlaves && masterPrice === 0;
       const slaveArts = scannables.map((r) => r.ARTIKELNR).filter(Boolean).filter((a) => a !== art);
 
       return {
