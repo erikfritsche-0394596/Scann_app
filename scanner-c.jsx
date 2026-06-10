@@ -457,6 +457,14 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
     );
   }
 
+  // Hilfsfunktion: zum Suche-Tab springen und Aktionsfilter setzen
+  // Muss VOR detailScreen stehen damit der Banner darauf zugreifen kann
+  const goToAktionen = () => {
+    setFilterBrand(null); setFilterCat(null); setFilterAktion(true); setQ('');
+    setDetail(null);
+    setTimeout(() => setTab('search'), 50);
+  };
+
   // ── Detailansicht ─────────────────────────────────────────────
   const detailScreen = detail && (() => {
     const Tile      = ({ children }) => <div style={{ background: T.card, borderRadius: T.radius, padding: T.pad, border: `1px solid ${T.border}`, boxShadow: T.tileShadow }}>{children}</div>;
@@ -769,13 +777,6 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
   const [filterAktion, setFilterAktion] = useState(false);
   const toks = q2.length >= 2 ? q2.split(/\s+/).filter(Boolean) : [];
   const SEARCH_CAP = 40;
-
-  // Hilfsfunktion: zum Suche-Tab springen und Aktionsfilter setzen
-  const goToAktionen = () => {
-    setFilterBrand(null); setFilterCat(null); setFilterAktion(true); setQ('');
-    setDetail(null);
-    setTimeout(() => setTab('search'), 50);
-  };
 
   // Deaktivierte Artikel (Kategorie enthält "Deaktivierte Artikel") grundsätzlich ausblenden
   const isDeactivated = (p) => (p.cat || '').includes('Deaktivierte Artikel');
