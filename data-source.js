@@ -110,9 +110,11 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const locations = LOCATIONS.map((L) => ({ key: L.key, label: L.label, home: !!L.home, n: locs[L.key] }));
 
       // Preis: PREIS = Verkaufspreis, UVP = Listenpreis (Streichpreis wenn höher)
-      const price  = num(r.PREIS);
-      const uvp    = num(r.UVP);
-      const onSale = uvp > 0 && price > 0 && price < uvp - 0.001;
+      // Wenn kein PREIS vorhanden, UVP als Fallback anzeigen
+      const priceRaw = num(r.PREIS);
+      const uvp      = num(r.UVP);
+      const price    = priceRaw > 0 ? priceRaw : uvp;
+      const onSale   = uvp > 0 && priceRaw > 0 && priceRaw < uvp - 0.001;
 
       const brand = cleanBrand(r.MARKE);
       const cat   = cleanCat(r.KATEGORIE);
@@ -147,7 +149,7 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
         locs,
         image,
         shopUrl,
-        isMaster,
+        isMaster:      false,  // alle Artikel werden angezeigt
         masterArt:     masterModel || null,
         slaveArts,
         inactive:      isInactive,
