@@ -128,8 +128,9 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
 
       // Varianten bauen
       const variants = isVariantProduct ? attrRows.map((x) => {
-        const vUvp = num(x.r.UVP); const vPrice = num(x.r.PREIS);
-        const vOnSale = vUvp > 0 && vPrice < vUvp - 0.001;
+        const vUvp = num(x.r.UVP); const vPriceRaw = num(x.r.PREIS);
+        const vPrice = vPriceRaw > 0 ? vPriceRaw : vUvp;
+        const vOnSale = vUvp > 0 && vPriceRaw > 0 && vPriceRaw < vUvp - 0.001;
         const vLabel = effectiveVarying
           ? effectiveVarying.map((k) => x.a[k]).filter(Boolean).join(' · ')
           : (baseName(nameOf(x.r)) !== baseName(nameOf(anchor))
@@ -144,7 +145,7 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
           art:   x.r.ARTIKELNR || '',
           image: resolveImg(x.r.BILD_URL || ''),
           price: vOnSale ? vUvp : vPrice,
-          sale:  vOnSale ? vPrice : null,
+          sale:  vOnSale ? vPriceRaw : null,
           // Shop-URL direkt aus Spalte Q (ATLOS_URL)
           shopUrl: (x.r.ATLOS_URL || '').trim() || null,
         };
@@ -156,10 +157,11 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const locations    = LOCATIONS.map((L) => ({ key: L.key, label: L.label, home: !!L.home, n: totalsByLoc[L.key] }));
       const stockTotal   = locations.reduce((a, l) => a + l.n, 0);
 
-      // Preis des Anker-Artikels
-      const uvp    = num(anchor.UVP);
-      const price  = num(anchor.PREIS);
-      const onSale = uvp > 0 && price < uvp - 0.001;
+      // Preis des Anker-Artikels — wenn kein PREIS vorhanden, UVP als Fallback
+      const uvp        = num(anchor.UVP);
+      const priceRaw   = num(anchor.PREIS);
+      const price      = priceRaw > 0 ? priceRaw : uvp;
+      const onSale     = uvp > 0 && priceRaw > 0 && priceRaw < uvp - 0.001;
 
       // Status
       const statusVal    = (anchor.STATUS || anchor.Status || scannables[0]?.STATUS || scannables[0]?.Status || '').trim();
@@ -180,14 +182,8 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       // Für Master: eigene ATLOS_URL, für Slave/Einzelartikel: ATLOS_URL des Anchors
       const shopUrl = (anchor.ATLOS_URL || '').trim() || null;
 
-      // Master/Slave-Flags
-      // Ausblenden NUR wenn: es eine Master-Zeile gibt, die keinen eigenen Preis hat,
-      // UND die Gruppe keine Slave-Zeilen enthält (d.h. scannables = [master] als Fallback).
-      // Gruppen mit echten Slaves werden als Varianten-Produkt angezeigt (Slaves haben Preis).
-      // Master-Zeilen mit eigenem Preis werden ebenfalls normal angezeigt.
-      const hasRealSlaves = rows.some((r) => (r.MASTER_SLAVE || '').toUpperCase() !== 'M');
-      const masterPrice   = master ? num(master.PREIS) : 0;
-      const isMasterProduct = !!master && !hasRealSlaves && masterPrice === 0;
+      // Kein isMaster-Filter mehr — alle Artikel werden angezeigt.
+      const isMasterProduct = false;
       const slaveArts = scannables.map((r) => r.ARTIKELNR).filter(Boolean).filter((a) => a !== art);
 
       return {
