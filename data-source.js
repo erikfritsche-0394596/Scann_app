@@ -110,11 +110,9 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
       const locations = LOCATIONS.map((L) => ({ key: L.key, label: L.label, home: !!L.home, n: locs[L.key] }));
 
       // Preis: PREIS = Verkaufspreis, UVP = Listenpreis (Streichpreis wenn höher)
-      // Wenn kein PREIS vorhanden, UVP als Fallback anzeigen
-      const priceRaw = num(r.PREIS);
-      const uvp      = num(r.UVP);
-      const price    = priceRaw > 0 ? priceRaw : uvp;
-      const onSale   = uvp > 0 && priceRaw > 0 && priceRaw < uvp - 0.001;
+      const price  = num(r.PREIS);
+      const uvp    = num(r.UVP);
+      const onSale = uvp > 0 && price > 0 && price < uvp - 0.001;
 
       const brand = cleanBrand(r.MARKE);
       const cat   = cleanCat(r.KATEGORIE);
@@ -128,6 +126,9 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
 
       // Aktionsangebot: Freitext aus Spalte "Aktionsangebot" — leer = kein Angebot
       const aktionsangebot = (r.Aktionsangebot || r.AKTIONSANGEBOT || '').trim() || null;
+
+      // Kein Preis vorhanden → Hinweis für den Kunden
+      const noPrice = price === 0 && uvp === 0;
 
       // slaveArts: nur für Master-Artikel befüllt
       const slaveArts = isMaster ? (masterSlaveMap[art.toLowerCase()] || []) : [];
@@ -149,12 +150,13 @@ window.IMAGE_BASE_URL  = 'https://www.atlantiscloud.de/images/products/gross/';
         locs,
         image,
         shopUrl,
-        isMaster:      isMaster && slaveArts.length > 0,  // nur ausblenden wenn Master MIT Slaves
+        isMaster:      isMaster && slaveArts.length > 0,
         masterArt:     masterModel || null,
         slaveArts,
         inactive:      isInactive,
         restposten:    isRestposten,
         aktionsangebot,
+        noPrice,
         variants:      [],
         _s: (name + ' ' + brand + ' ' + art + ' ' + cat + ' ' + ean).toLowerCase(),
       };
