@@ -997,7 +997,7 @@ function ScannerC({ tw, products, fit = 'device', meta }) {
             options={[['all','Alle'], ['0','0 Slaves'], ['1+','1+ Slaves']]} />
           <ChipGroup label="Preis" value={debugFilterPreis} onChange={setDebugFilterPreis}
             options={[['all','Alle'], ['ja','Mit Preis'], ['nein','Kein Preis']]} />
-          <ChipGroup label="„master" im Namen/Art.-Nr." value={debugFilterName} onChange={setDebugFilterName}
+          <ChipGroup label='"master" im Namen/Art.-Nr.' value={debugFilterName} onChange={setDebugFilterName}
             options={[['all','Alle'], ['ja','Enthält master'], ['nein','Ohne master']]} />
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: T.pad, display: 'flex', flexDirection: 'column', gap: 6 }}>
